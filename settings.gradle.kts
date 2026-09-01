@@ -9,6 +9,14 @@ pluginManagement {
         google()
         mavenCentral()
     }
+    // KSP 的 plugin marker 在部分镜像/全新环境解析不稳定，直接映射到 Maven Central 上的真实构件，绕开 marker POM
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "com.google.devtools.ksp") {
+                useModule("com.google.devtools.ksp:symbol-processing-gradle-plugin:${requested.version}")
+            }
+        }
+    }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
