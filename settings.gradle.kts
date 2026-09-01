@@ -1,26 +1,18 @@
 pluginManagement {
     repositories {
-        // 国内镜像优先（阿里云），海外环境可删除前三条
+        // 阿里云镜像在前：国内直连稳定（本机已将其加入代理 nonProxyHosts），海外 runner 也可访问
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
-        google {
-            content {
-                // 只圈定 Android 相关 group；com.google.devtools.ksp 不在 Google maven，
-                // 若写成 com.google.* 会把 KSP 错误圈入，导致 CI 全新环境解析插件失败
-                includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google\\.android.*")
-                includeGroupByRegex("androidx.*")
-            }
-        }
-        mavenCentral()
+        // 官方源兜底（不要用 content include 圈定 group，否则会把 KSP 等错误锁死在单一仓库）
         gradlePluginPortal()
+        google()
+        mavenCentral()
     }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // 国内镜像优先（阿里云），海外环境可删除前两条
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         google()

@@ -30,6 +30,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Check repository reachability
+        run: |
+          echo "plugin-portal:"; curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 https://plugins.gradle.org/m2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.0.20-1.0.25/com.google.devtools.ksp.gradle.plugin-2.0.20-1.0.25.pom
+          echo "maven-central:"; curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 https://repo1.maven.org/maven2/com/google/devtools/ksp/symbol-processing-gradle-plugin/2.0.20-1.0.25/symbol-processing-gradle-plugin-2.0.20-1.0.25.pom
+          echo "google-maven:"; curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 https://dl.google.com/dl/android/maven2/androidx/core/core-ktx/maven-metadata.xml
+
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
