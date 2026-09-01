@@ -1,0 +1,25 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# 本地研究素材与模型分发物（模型走 GitHub Release，不进仓库）
+/research/
+/dist-models/
+/.kotlin/
+
+# 构建日志
+build-log.txt
+build-release-log.txt
+build-test-log.txt
+*.log

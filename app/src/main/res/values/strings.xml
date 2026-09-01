@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">水课帮</string>
+    <string name="record_channel_name">课堂记录</string>
+    <string name="record_channel_desc">实时录音识别运行状态与老师提问提醒</string>
+</resources>

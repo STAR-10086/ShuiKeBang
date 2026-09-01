@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>水课帮 Android 版 · 高保真 UI 设计稿</title>
+<style>
+  :root{
+    --brand:#2E6BE6; --brand-deep:#1F54C8; --brand-soft:#EAF1FF;
+    --record:#F23C3C; --record-deep:#D92525; --record-soft:#FFF3F2; --record-line:#FFDAD7;
+    --ok:#18A058; --warn:#F2994A;
+    --bg:#F4F6F9; --card:#FFFFFF; --text:#1B1E24; --sub:#8B909A; --faint:#B6BAC3;
+    --line:#EDF0F4; --ink:#0E1116;
+    --radius:18px;
+    --shadow-card:0 2px 10px rgba(20,30,55,.05);
+    --shadow-fab:0 8px 24px rgba(20,30,55,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Source Han Sans SC",Roboto,"Segoe UI",sans-serif;
+    background:#0E1116; color:#E8ECF3; padding:48px 28px 72px;
+  }
+  .page-head{max-width:1320px;margin:0 auto 12px;}
+  .page-head h1{font-size:26px;font-weight:700;letter-spacing:.5px;}
+  .page-head p{color:#9AA3B2;font-size:13.5px;margin-top:8px;line-height:1.7;}
+  .tag-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+  .tag{font-size:12px;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#C6CDDA;}
+  .stage{max-width:1320px;margin:36px auto 0;display:flex;flex-wrap:wrap;gap:34px 30px;justify-content:flex-start;}
+
+  /* ============ 手机外壳 ============ */
+  .phone{width:340px;flex:0 0 auto;}
+  .frame{
+    width:340px;height:724px;background:#000;border-radius:46px;padding:10px;
+    box-shadow:0 24px 60px rgba(0,0,0,.55), inset 0 0 0 2px #262b34;
+    position:relative;
+  }
+  .screen{
+    width:100%;height:100%;border-radius:37px;overflow:hidden;background:var(--bg);
+    position:relative;display:flex;flex-direction:column;
+  }
+  .statusbar{
+    height:40px;flex:0 0 40px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 22px 0 24px;font-size:12.5px;font-weight:600;color:var(--text);
+  }
+  .statusbar .sb-icons{display:flex;align-items:center;gap:5px;}
+  .sb-icons svg{display:block;}
+  .content{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+
+  /* 安卓顶部「胶囊岛」 */
+  .island-slot{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:30;display:flex;justify-content:center;pointer-events:none;}
+  .capsule{
+    background:#111318;border-radius:999px;color:#fff;display:flex;align-items:center;gap:8px;
+    padding:8px 14px;font-size:12px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.3);
+    max-width:286px;
+  }
+  .capsule .dot-live{width:7px;height:7px;border-radius:50%;background:var(--record);animation:pulse 1.4s infinite;}
+  .capsule .wave{display:flex;align-items:flex-end;gap:2px;height:13px;}
+  .capsule .wave i{width:2.5px;background:#FF6A5E;border-radius:2px;animation:wave 1s infinite ease-in-out;}
+  .capsule .wave i:nth-child(1){height:6px;animation-delay:0s}
+  .capsule .wave i:nth-child(2){height:12px;animation-delay:.15s}
+  .capsule .wave i:nth-child(3){height:8px;animation-delay:.3s}
+  .capsule .wave i:nth-child(4){height:11px;animation-delay:.45s}
+  .capsule .q-label{background:var(--record);color:#fff;font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:700;white-space:nowrap;}
+  .capsule .q-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;}
+  .capsule.expanded{border-radius:22px;padding:10px 14px;animation:pop .35s ease;max-width:232px;}
+  .capsule.expanded .q-text{max-width:126px;font-size:11.5px;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+  @keyframes wave{0%,100%{transform:scaleY(.5)}50%{transform:scaleY(1)}}
+  @keyframes pop{from{transform:scale(.92);opacity:.4}to{transform:scale(1);opacity:1}}
+  @keyframes cardPulse{0%{box-shadow:0 0 0 0 rgba(242,60,60,.35)}70%{box-shadow:0 0 0 10px rgba(242,60,60,0)}100%{box-shadow:0 0 0 0 rgba(242,60,60,0)}}
+
+  /* 通用顶栏 */
+  .appbar{padding:6px 18px 10px;display:flex;align-items:center;justify-content:space-between;}
+  .appbar .title{font-size:18px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:9px;}
+  .appbar .title .mini-en{font-size:10.5px;color:var(--faint);font-weight:500;}
+  .icon-btn{width:36px;height:36px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-card);}
+  .logo-mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#3D7BFF,#2E6BE6);display:flex;align-items:center;justify-content:center;color:#fff;}
+
+  /* ===== 屏1 待机 ===== */
+  .idle{flex:1;display:flex;flex-direction:column;align-items:center;padding:34px 26px 0;}
+  .idle .hero-ring{position:relative;width:188px;height:188px;margin:30px 0 6px;display:flex;align-items:center;justify-content:center;}
+  .idle .ring{position:absolute;border-radius:50%;border:1.5px solid rgba(46,107,230,.22);}
+  .idle .ring.r1{inset:0;animation:ringBreath 2.8s infinite;}
+  .idle .ring.r2{inset:18px;border-color:rgba(46,107,230,.14);}
+  @keyframes ringBreath{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.05);opacity:.5}}
+  .idle .start-btn{
+    width:128px;height:128px;border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(145deg,#4482FF,#245BD6);
+    box-shadow:0 14px 34px rgba(46,107,230,.4), inset 0 2px 6px rgba(255,255,255,.35);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#fff;
+  }
+  .idle .start-btn .mic-txt{font-size:15px;font-weight:700;letter-spacing:2px;}
+  .idle h2{font-size:19px;color:var(--text);margin-top:26px;font-weight:700;}
+  .idle .hint{font-size:13px;color:var(--sub);margin-top:9px;text-align:center;line-height:1.7;}
+  .privacy-strip{
+    margin-top:auto;margin-bottom:20px;width:100%;background:#fff;border-radius:16px;padding:13px 15px;
+    display:flex;align-items:center;gap:10px;box-shadow:var(--shadow-card);
+  }
+  .privacy-strip .ps-text{font-size:11.5px;color:var(--sub);line-height:1.55;}
+  .privacy-strip .ps-text b{color:var(--text);font-size:12px;}
+  .lang-switch{display:flex;gap:6px;margin-top:16px;background:#ECEEF2;border-radius:999px;padding:4px;}
+  .lang-switch span{font-size:12px;font-weight:600;padding:5px 16px;border-radius:999px;color:var(--sub);}
+  .lang-switch span.on{background:#fff;color:var(--brand);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+
+  /* ===== 屏2 模型下载 ===== */
+  .dl{flex:1;padding:8px 24px;display:flex;flex-direction:column;}
+  .dl .dl-illu{width:92px;height:92px;border-radius:26px;background:linear-gradient(145deg,#EAF1FF,#D8E6FF);display:flex;align-items:center;justify-content:center;margin:26px auto 20px;}
+  .dl h3{text-align:center;font-size:18px;color:var(--text);font-weight:700;}
+  .dl .dl-sub{text-align:center;font-size:12.5px;color:var(--sub);line-height:1.7;margin-top:8px;}
+  .dl-card{background:#fff;border-radius:18px;padding:18px;margin-top:24px;box-shadow:var(--shadow-card);}
+  .dl-card .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--sub);margin-bottom:10px;}
+  .dl-card .row b{color:var(--text);font-size:13px;}
+  .bar{height:9px;border-radius:99px;background:#EDF0F4;overflow:hidden;}
+  .bar i{display:block;height:100%;width:66%;border-radius:99px;background:linear-gradient(90deg,#4482FF,#2E6BE6);}
+  .dl-meta{display:flex;justify-content:space-between;margin-top:9px;font-size:11.5px;color:var(--faint);}
+  .dl-note{font-size:11.5px;color:var(--sub);line-height:1.7;margin-top:16px;background:var(--brand-soft);border-radius:12px;padding:11px 13px;}
+  .btn-primary{margin-top:auto;margin-bottom:18px;height:48px;border-radius:14px;border:none;background:linear-gradient(135deg,#4482FF,#2E6BE6);color:#fff;font-size:15px;font-weight:700;letter-spacing:1px;box-shadow:0 8px 20px rgba(46,107,230,.32);}
+  .btn-ghost{height:44px;border-radius:14px;border:1px solid var(--line);background:#fff;color:var(--sub);font-size:13.5px;font-weight:600;margin-bottom:12px;}
+
+  /* ===== 屏3/4 录音主界面 ===== */
+  .rec-status{
+    margin:2px 16px 10px;background:var(--record-soft);border:1px solid var(--record-line);
+    border-radius:13px;padding:9px 13px;display:flex;align-items:center;gap:9px;
+  }
+  .rec-status .rec-dot{width:8px;height:8px;border-radius:50%;background:var(--record);animation:pulse 1.3s infinite;flex:0 0 auto;}
+  .rec-status .rec-label{font-size:12.5px;font-weight:700;color:var(--record-deep);}
+  .rec-status .ontag{font-size:10px;color:var(--brand);background:var(--brand-soft);padding:2px 7px;border-radius:99px;font-weight:700;display:flex;align-items:center;gap:3px;}
+  .rec-status .timer{margin-left:auto;font-size:12.5px;font-weight:700;color:var(--record-deep);font-variant-numeric:tabular-nums;}
+  .transcript{flex:1;overflow:hidden;padding:2px 16px;}
+  .line{display:flex;gap:9px;margin-bottom:13px;font-size:13px;line-height:1.62;}
+  .line .t{flex:0 0 auto;color:var(--faint);font-size:11px;padding-top:2px;font-variant-numeric:tabular-nums;}
+  .line .tx{color:var(--text);}
+  .line .tx.dim{color:#5B606B;}
+  .q-card{
+    background:linear-gradient(180deg,#FFF6F5,#FFF1F0);border:1px solid var(--record-line);
+    border-left:3.5px solid var(--record);border-radius:14px;padding:12px 13px;margin:4px 0 13px;
+  }
+  .q-card.alert{animation:cardPulse 1.6s infinite;}
+  .q-card .qc-head{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:800;color:var(--record-deep);margin-bottom:9px;}
+  .q-card .qc-row{display:flex;gap:8px;font-size:11.8px;line-height:1.55;margin-bottom:7px;color:#7A4A47;}
+  .q-card .qc-row:last-child{margin-bottom:0;}
+  .q-card .qc-row .ic{flex:0 0 auto;width:16px;height:16px;border-radius:50%;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .q-card .qc-row .ic.warn{background:#FFE3E0;color:var(--record-deep);}
+  .q-card .qc-row .ic.q{background:var(--record);color:#fff;}
+  .q-card .qc-row .tm{color:#B08582;}
+  .q-card .qc-row b{color:#3A201F;font-weight:700;}
+  .q-card .qc-row .kw{color:var(--record-deep);font-weight:700;white-space:nowrap;}
+  .q-card .qc-row>span{word-break:break-word;}
+  .q-card .copy-mini{margin-top:9px;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--record-deep);background:#fff;border:1px solid var(--record-line);padding:5px 11px;border-radius:99px;}
+
+  .dock{
+    flex:0 0 auto;margin:0 14px 16px;background:#fff;border-radius:24px;padding:11px 14px;
+    display:flex;align-items:center;justify-content:space-around;box-shadow:var(--shadow-fab);
+  }
+  .dock .dbtn{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--sub);}
+  .dock .circle{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  .dock .circle.stop{background:linear-gradient(145deg,#FF5A50,#E22B2B);box-shadow:0 6px 16px rgba(242,60,60,.38);}
+  .dock .circle.stop i{width:15px;height:15px;border-radius:4px;background:#fff;}
+  .dock .circle.soft-blue{background:var(--brand-soft);}
+  .dock .circle.soft-gray{background:#F1F3F6;}
+  .toast{
+    position:absolute;left:50%;bottom:96px;transform:translateX(-50%);z-index:40;
+    background:rgba(17,19,24,.92);color:#fff;font-size:12px;padding:9px 16px;border-radius:999px;
+    display:flex;align-items:center;gap:7px;white-space:nowrap;box-shadow:0 8px 22px rgba(0,0,0,.3);
+  }
+  .toast .q-label{background:var(--record);font-size:10px;padding:2px 7px;border-radius:99px;font-weight:700;}
+
+  /* ===== 屏5 历史列表 ===== */
+  .hist{flex:1;padding:2px 16px;overflow:hidden;}
+  .hist-search{background:#fff;border-radius:14px;height:40px;display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--faint);font-size:12.5px;box-shadow:var(--shadow-card);margin-bottom:14px;}
+  .hist-card{background:#fff;border-radius:16px;padding:14px 15px;margin-bottom:11px;box-shadow:var(--shadow-card);}
+  .hist-card .hc-top{display:flex;align-items:center;justify-content:space-between;}
+  .hist-card .hc-name{font-size:14.5px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;}
+  .hist-card .hc-name .en{font-size:9.5px;font-weight:700;color:var(--brand);background:var(--brand-soft);padding:2px 6px;border-radius:6px;letter-spacing:.5px;}
+  .hist-card .hc-meta{font-size:11.5px;color:var(--sub);margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;}
+  .hist-card .hc-meta .qn{color:var(--record-deep);font-weight:700;}
+  .hist-card .hc-bottom{margin-top:10px;display:flex;align-items:center;gap:8px;}
+  .mini-q{font-size:11px;color:#5B606B;background:#F6F7FA;border-radius:8px;padding:5px 9px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .fab-add{position:absolute;right:18px;bottom:20px;width:52px;height:52px;border-radius:18px;background:linear-gradient(145deg,#4482FF,#2E6BE6);box-shadow:0 10px 22px rgba(46,107,230,.4);display:flex;align-items:center;justify-content:center;z-index:20;}
+
+  /* ===== 屏6 会话详情 ===== */
+  .seg{margin:0 16px 12px;background:#ECEEF2;border-radius:13px;padding:4px;display:flex;}
+  .seg span{flex:1;text-align:center;font-size:12.5px;font-weight:600;padding:7px 0;border-radius:10px;color:var(--sub);}
+  .seg span.on{background:#fff;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+  .seg span .n{color:var(--record);font-weight:800;margin-left:3px;}
+  .qlist{flex:1;padding:0 16px;overflow:hidden;}
+  .q-item{background:#fff;border-radius:15px;padding:13px 14px;margin-bottom:11px;box-shadow:var(--shadow-card);border-left:3px solid var(--record);}
+  .q-item .qi-top{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--faint);margin-bottom:7px;}
+  .q-item .qi-q{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.55;}
+  .q-item .qi-act{margin-top:10px;display:flex;gap:8px;}
+  .q-item .qi-act span{font-size:10.5px;font-weight:700;padding:5px 11px;border-radius:99px;background:#F6F7FA;color:#5B606B;display:inline-flex;gap:4px;align-items:center;}
+  .q-item .qi-act span.red{background:var(--record-soft);color:var(--record-deep);}
+
+  .screen-label{text-align:center;margin-top:16px;}
+  .screen-label .sl-t{font-size:14.5px;font-weight:700;color:#E8ECF3;}
+  .screen-label .sl-d{font-size:12px;color:#8B94A5;margin-top:5px;line-height:1.6;max-width:300px;margin-left:auto;margin-right:auto;}
+
+  /* 设计规范区 */
+  .spec{max-width:1320px;margin:56px auto 0;background:#151922;border:1px solid #232938;border-radius:22px;padding:30px 32px;}
+  .spec h2{font-size:19px;margin-bottom:20px;}
+  .spec-grid{display:flex;flex-wrap:wrap;gap:14px;}
+  .swatch{width:150px;border-radius:14px;overflow:hidden;background:#1B202B;}
+  .swatch .c{height:58px;}
+  .swatch .w{padding:9px 11px;font-size:11.5px;color:#AEB7C6;line-height:1.5;}
+  .spec-cols{display:flex;flex-wrap:wrap;gap:26px;margin-top:26px;}
+  .spec-col{flex:1 1 300px;}
+  .spec-col h4{font-size:13.5px;color:#fff;margin-bottom:10px;}
+  .spec-col li{font-size:12.5px;color:#A6AFC0;line-height:1.9;list-style:none;padding-left:16px;position:relative;}
+  .spec-col li::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:var(--brand);}
+  .layer-flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;}
+  .layer{font-size:12px;padding:9px 13px;border-radius:11px;background:#1B202B;border:1px solid #2A3142;color:#C6CDDA;line-height:1.5;}
+  .layer b{color:#fff;}
+  .layer.hot{border-color:#F23C3C55;background:#2A1B1C;}
+  .layer.cool{border-color:#2E6BE655;background:#1A2236;}
+  .arrow{color:#5A6376;font-size:15px;}
+  .foot{max-width:1320px;margin:26px auto 0;color:#6E7787;font-size:12px;line-height:1.8;}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>水课帮 · Android 版高保真 UI 设计稿</h1>
+  <p>依据 iOS 版《水课帮-课堂提问助手》v4.0 官方 App Store 截图与官方实机演示视频的界面结构 1:1 转译，并按 Android（Material 风格 + 小米/vivo 胶囊形态）重绘。示例文案取自官方演示，非真实课堂数据。</p>
+  <div class="tag-row">
+    <span class="tag">离线 ASR：sherpa-onnx + 流式 Zipformer（真流式 · 整套约 28MB）</span>
+    <span class="tag">模型动态下发 · APK 本体不含模型</span>
+    <span class="tag">SQLite 仅存文本</span>
+    <span class="tag">无账号 / 无云同步 / 无音频留存</span>
+    <span class="tag">适配：小米超级岛 · vivo 原子岛 · 通用悬浮胶囊</span>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ============ 屏 1：待机首页 ============ -->
+  <div class="phone">
+    <div class="frame"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="sb-icons">
+        <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="2.6" height="4" rx=".6" fill="#1B1E24"/><rect x="4.2" y="5" width="2.6" height="6" rx=".6" fill="#1B1E24"/><rect x="8.4" y="2.5" width="2.6" height="8.5" rx=".6" fill="#1B1E24"/><rect x="12.6" y="0" width="2.6" height="11" rx=".6" fill="#1B1E24"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.2c2 0 3.8.8 5.2 2L11.4 5.6C10.3 4.6 9 4 7.5 4S4.7 4.6 3.6 5.6L2.3 4.2C3.7 3 5.5 2.2 7.5 2.2z" fill="#1B1E24"/><circle cx="7.5" cy="9" r="1.5" fill="#1B1E24"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.6" fill="none" stroke="#1B1E24"/><rect x="2" y="2" width="15" height="7" rx="1.4" fill="#1B1E24"/><rect x="21.3" y="3.4" width="1.8" height="4.2" rx=".9" fill="#1B1E24"/></svg>
+      </span></div>
+      <div class="content">
+        <div class="appbar">
+          <div class="title"><span class="logo-mark">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z" fill="#fff"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>水课帮</div>
+          <div class="icon-btn">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5B606B" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </div>
+        </div>
+        <div class="idle">
+          <div class="lang-switch"><span class="on">中文</span><span>English</span><span>中英混合</span></div>
+          <div class="hero-ring">
+            <span class="ring r1"></span><span class="ring r2"></span>
+            <button class="start-btn">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z" fill="#fff"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span class="mic-txt">开始记录</span>
+            </button>
+          </div>
+          <h2>听见课堂，识别提问</h2>
+          <p class="hint">点击开始按钮，即可启动实时课堂记录<br>语音识别结果将实时显示在此区域</p>
+          <div class="privacy-strip">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" fill="#EAF1FF"/><path d="M9 12l2 2 4-4" stroke="#2E6BE6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div class="ps-text"><b>设备端离线识别 · 保护隐私</b><br>音频不出设备、不上传云端，无需账号</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-label"><div class="sl-t">① 待机首页 / 空状态</div><div class="sl-d">语言切换、开始记录主按钮、隐私承诺；首次点击先进入模型校验</div></div>
+  </div>
+
+  <!-- ============ 屏 2：模型下载（Android 特有） ============ -->
+  <div class="phone">
+    <div class="frame"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="sb-icons">
+        <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="2.6" height="4" rx=".6" fill="#1B1E24"/><rect x="4.2" y="5" width="2.6" height="6" rx=".6" fill="#1B1E24"/><rect x="8.4" y="2.5" width="2.6" height="8.5" rx=".6" fill="#1B1E24"/><rect x="12.6" y="0" width="2.6" height="11" rx=".6" fill="#1B1E24"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.2c2 0 3.8.8 5.2 2L11.4 5.6C10.3 4.6 9 4 7.5 4S4.7 4.6 3.6 5.6L2.3 4.2C3.7 3 5.5 2.2 7.5 2.2z" fill="#1B1E24"/><circle cx="7.5" cy="9" r="1.5" fill="#1B1E24"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.6" fill="none" stroke="#1B1E24"/><rect x="2" y="2" width="15" height="7" rx="1.4" fill="#1B1E24"/><rect x="21.3" y="3.4" width="1.8" height="4.2" rx=".9" fill="#1B1E24"/></svg>
+      </span></div>
+      <div class="content">
+        <div class="appbar"><div class="title">离线识别模型</div></div>
+        <div class="dl">
+          <div class="dl-illu">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2E6BE6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          </div>
+          <h3>首次使用需下载离线模型</h3>
+          <p class="dl-sub">APK 本体仅数 MB，识别模型不打包进安装包<br>下载一次后可永久离线使用</p>
+          <div class="dl-card">
+            <div class="row"><b>Streaming Zipformer · 中英真流式 INT8</b><span>v1.0</span></div>
+            <div class="bar"><i></i></div>
+            <div class="dl-meta"><span>19 MB / 28 MB · 66%</span><span>约还需 3 秒</span></div>
+          </div>
+          <div class="dl-note">模型保存在应用私有目录，卸载时随 App 一并清除；仅模型下载需要联网，识别过程全程离线。</div>
+          <button class="btn-ghost">后台下载，完成后通知我</button>
+          <button class="btn-primary">继续下载</button>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-label"><div class="sl-t">② 模型下载（Android 特有）</div><div class="sl-d">对应 iOS 无需此步（系统 Speech 框架）；安卓必须动态下发 sherpa-onnx 模型</div></div>
+  </div>
+
+  <!-- ============ 屏 3：录音中（核心界面） ============ -->
+  <div class="phone">
+    <div class="frame"><div class="screen">
+      <div class="statusbar"><span>14:12</span><span class="sb-icons">
+        <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="2.6" height="4" rx=".6" fill="#1B1E24"/><rect x="4.2" y="5" width="2.6" height="6" rx=".6" fill="#1B1E24"/><rect x="8.4" y="2.5" width="2.6" height="8.5" rx=".6" fill="#1B1E24"/><rect x="12.6" y="0" width="2.6" height="11" rx=".6" fill="#1B1E24"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.2c2 0 3.8.8 5.2 2L11.4 5.6C10.3 4.6 9 4 7.5 4S4.7 4.6 3.6 5.6L2.3 4.2C3.7 3 5.5 2.2 7.5 2.2z" fill="#1B1E24"/><circle cx="7.5" cy="9" r="1.5" fill="#1B1E24"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.6" fill="none" stroke="#1B1E24"/><rect x="2" y="2" width="15" height="7" rx="1.4" fill="#1B1E24"/><rect x="21.3" y="3.4" width="1.8" height="4.2" rx=".9" fill="#1B1E24"/></svg>
+      </span></div>
+      <div class="island-slot"><div class="capsule"><span class="dot-live"></span><span class="wave"><i></i><i></i><i></i><i></i></span>正在记录 · 00:16</div></div>
+      <div class="content" style="padding-top:30px;">
+        <div class="appbar">
+          <div class="title">实时课堂记录<span class="mini-en">Class Assistant</span></div>
+          <div class="icon-btn" style="width:auto;padding:0 13px;height:34px;font-size:12px;font-weight:700;color:var(--brand);">保存</div>
+        </div>
+        <div class="rec-status">
+          <span class="rec-dot"></span><span class="rec-label">正在录音</span>
+          <span class="ontag">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" stroke="#2E6BE6" stroke-width="2" stroke-linejoin="round"/></svg>
+            设备端识别</span>
+          <span class="timer">00:16</span>
+        </div>
+        <div class="transcript">
+          <div class="line"><span class="t">14:11:58</span><span class="tx dim">好，这节课我们继续来讲物理啊。</span></div>
+          <div class="line"><span class="t">14:12:05</span><span class="tx dim">我们先请一位同学回答一下，什么是麦克斯韦方程组？</span></div>
+          <div class="q-card">
+            <div class="qc-head">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#D92525"><path d="M12 2L1.5 20h21L12 2zm0 6v6m0 3.5v.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>
+              老师提问
+            </div>
+            <div class="qc-row"><span class="ic warn">▲</span><span><span class="tm">[14:12:21]</span> 可能被提问：检测到关键词 <span class="kw">「回答一下」</span></span></div>
+            <div class="qc-row"><span class="ic q">?</span><span><span class="tm">[14:12:24]</span> 问题回溯：<b>什么是麦克斯韦方程组？</b></span></div>
+            <span class="copy-mini">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#D92525" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              复制问题</span>
+          </div>
+          <div class="line"><span class="t">14:12:31</span><span class="tx dim">大家可以先回忆一下上节课讲的电磁场基本方程……</span></div>
+        </div>
+        <div class="dock">
+          <div class="dbtn"><div class="circle stop"><i></i></div>停止</div>
+          <div class="dbtn"><div class="circle soft-blue">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2E6BE6" stroke-width="1.9"><rect x="6" y="3" width="13" height="18" rx="2"/><path d="M14 3v4h4M9 12h7M9 16h5"/></svg>
+          </div>复制</div>
+          <div class="dbtn"><div class="circle soft-blue">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2E6BE6" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.2 5.3L20 10l-5.8 1.7L12 17l-2.2-5.3L4 10l5.8-1.7L12 3z"/></svg>
+          </div>问 AI</div>
+          <div class="dbtn"><div class="circle soft-gray">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5B606B" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          </div>标记</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-label"><div class="sl-t">③ 录音中 · 转录流 + 提问卡片（核心）</div><div class="sl-d">两级判定：可能被提问（关键词预警）→ 问题回溯（提取核心问句），结构对齐 iOS 原版</div></div>
+  </div>
+
+  <!-- ============ 屏 4：提问瞬间 + 安卓胶囊岛 ============ -->
+  <div class="phone">
+    <div class="frame"><div class="screen">
+      <div class="statusbar"><span>14:12</span><span class="sb-icons">
+        <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="2.6" height="4" rx=".6" fill="#1B1E24"/><rect x="4.2" y="5" width="2.6" height="6" rx=".6" fill="#1B1E24"/><rect x="8.4" y="2.5" width="2.6" height="8.5" rx=".6" fill="#1B1E24"/><rect x="12.6" y="0" width="2.6" height="11" rx=".6" fill="#1B1E24"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.2c2 0 3.8.8 5.2 2L11.4 5.6C10.3 4.6 9 4 7.5 4S4.7 4.6 3.6 5.6L2.3 4.2C3.7 3 5.5 2.2 7.5 2.2z" fill="#1B1E24"/><circle cx="7.5" cy="9" r="1.5" fill="#1B1E24"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.6" fill="none" stroke="#1B1E24"/><rect x="2" y="2" width="15" height="7" rx="1.4" fill="#1B1E24"/><rect x="21.3" y="3.4" width="1.8" height="4.2" rx=".9" fill="#1B1E24"/></svg>
+      </span></div>
+      <div class="island-slot"><div class="capsule expanded"><span class="dot-live"></span><span class="q-text">什么是麦克斯韦方程组？</span><span class="q-label">有提问</span></div></div>
+      <div class="content" style="padding-top:42px;">
+        <div class="appbar">
+          <div class="title">实时课堂记录</div>
+          <div class="icon-btn" style="width:auto;padding:0 13px;height:34px;font-size:12px;font-weight:700;color:var(--brand);">保存</div>
+        </div>
+        <div class="rec-status">
+          <span class="rec-dot"></span><span class="rec-label">正在录音</span><span class="timer">00:24</span>
+        </div>
+        <div class="transcript">
+          <div class="line"><span class="t">14:11:58</span><span class="tx dim">好，这节课我们继续来讲物理啊。</span></div>
+          <div class="q-card alert">
+            <div class="qc-head">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#D92525"><path d="M12 2L1.5 20h21L12 2zm0 6v6m0 3.5v.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>
+              老师提问 · 刚刚
+            </div>
+            <div class="qc-row"><span class="ic warn">▲</span><span><span class="tm">[14:12:21]</span> 可能被提问：检测到关键词 <span class="kw">「回答一下」</span></span></div>
+            <div class="qc-row"><span class="ic q">?</span><span><span class="tm">[14:12:24]</span> 问题回溯：<b>什么是麦克斯韦方程组？</b></span></div>
+          </div>
+          <div class="line"><span class="t">14:12:31</span><span class="tx dim">大家可以先回忆一下……</span></div>
+        </div>
+        <div class="toast">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FF6A5E" stroke-width="2.2" stroke-linecap="round"><rect x="2" y="9" width="13" height="9" rx="2"/><path d="M15 12h4l3 3v3h-7M7 12v3M11 12v3"/></svg>
+          已震动提醒<span class="q-label">有提问</span>点击胶囊可快速回溯
+        </div>
+        <div class="dock">
+          <div class="dbtn"><div class="circle stop"><i></i></div>停止</div>
+          <div class="dbtn"><div class="circle soft-blue">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2E6BE6" stroke-width="1.9"><rect x="6" y="3" width="13" height="18" rx="2"/><path d="M14 3v4h4M9 12h7M9 16h5"/></svg>
+          </div>复制</div>
+          <div class="dbtn"><div class="circle soft-blue">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#2E6BE6" stroke-width="1.9" stroke-linejoin="round"><path d="M12 3l2.2 5.3L20 10l-5.8 1.7L12 17l-2.2-5.3L4 10l5.8-1.7L12 3z"/></svg>
+          </div>问 AI</div>
+          <div class="dbtn"><div class="circle soft-gray">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5B606B" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          </div>标记</div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-label"><div class="sl-t">④ 命中提问瞬间 · 顶部胶囊岛展开</div><div class="sl-d">震动 + 卡片脉冲 + 胶囊展开；切后台时由系统岛/悬浮胶囊/前台服务通知三级承接</div></div>
+  </div>
+
+  <!-- ============ 屏 5：历史会话 ============ -->
+  <div class="phone">
+    <div class="frame"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="sb-icons">
+        <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="2.6" height="4" rx=".6" fill="#1B1E24"/><rect x="4.2" y="5" width="2.6" height="6" rx=".6" fill="#1B1E24"/><rect x="8.4" y="2.5" width="2.6" height="8.5" rx=".6" fill="#1B1E24"/><rect x="12.6" y="0" width="2.6" height="11" rx=".6" fill="#1B1E24"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.2c2 0 3.8.8 5.2 2L11.4 5.6C10.3 4.6 9 4 7.5 4S4.7 4.6 3.6 5.6L2.3 4.2C3.7 3 5.5 2.2 7.5 2.2z" fill="#1B1E24"/><circle cx="7.5" cy="9" r="1.5" fill="#1B1E24"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.6" fill="none" stroke="#1B1E24"/><rect x="2" y="2" width="15" height="7" rx="1.4" fill="#1B1E24"/><rect x="21.3" y="3.4" width="1.8" height="4.2" rx=".9" fill="#1B1E24"/></svg>
+      </span></div>
+      <div class="content">
+        <div class="appbar">
+          <div class="title">课堂记录</div>
+          <div class="icon-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B606B" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+          </div>
+        </div>
+        <div class="hist">
+          <div class="hist-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B6BAC3" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+            搜索课堂记录或问题内容
+          </div>
+          <div class="hist-card">
+            <div class="hc-top"><div class="hc-name">大学物理（下）</div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C6CAD3" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>
+            <div class="hc-meta"><span>09-01 14:02</span><span>时长 42 分钟</span><span class="qn">提问 7 条</span></div>
+            <div class="hc-bottom"><span class="mini-q">什么是麦克斯韦方程组？</span></div>
+          </div>
+          <div class="hist-card">
+            <div class="hc-top"><div class="hc-name">毛泽东思想和中国特色社会主义理论体系概论</div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C6CAD3" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>
+            <div class="hc-meta"><span>08-31 10:00</span><span>时长 58 分钟</span><span class="qn">提问 3 条</span></div>
+            <div class="hc-bottom"><span class="mini-q">新民主主义革命的三大法宝是什么？</span></div>
+          </div>
+          <div class="hist-card">
+            <div class="hc-top"><div class="hc-name">专业英语听说 <span class="en">EN</span></div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C6CAD3" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>
+            <div class="hc-meta"><span>08-29 08:30</span><span>时长 35 分钟</span><span class="qn">提问 5 条</span></div>
+            <div class="hc-bottom"><span class="mini-q">What is the difference between TCP and UDP?</span></div>
+          </div>
+          <div class="hist-card">
+            <div class="hc-top"><div class="hc-name">线性代数</div>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C6CAD3" stroke-width="2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></div>
+            <div class="hc-meta"><span>08-27 14:00</span><span>时长 46 分钟</span><span class="qn">提问 2 条</span></div>
+          </div>
+        </div>
+        <div class="fab-add">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-label"><div class="sl-t">⑤ 历史会话列表</div><div class="sl-d">按时间倒序，显示时长/提问条数/最近一条问题；长按删除、点击进入详情；支持重命名</div></div>
+  </div>
+
+  <!-- ============ 屏 6：会话详情·提问列表 ============ -->
+  <div class="phone">
+    <div class="frame"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span class="sb-icons">
+        <svg width="16" height="11" viewBox="0 0 16 11"><rect x="0" y="7" width="2.6" height="4" rx=".6" fill="#1B1E24"/><rect x="4.2" y="5" width="2.6" height="6" rx=".6" fill="#1B1E24"/><rect x="8.4" y="2.5" width="2.6" height="8.5" rx=".6" fill="#1B1E24"/><rect x="12.6" y="0" width="2.6" height="11" rx=".6" fill="#1B1E24"/></svg>
+        <svg width="15" height="11" viewBox="0 0 15 11"><path d="M7.5 2.2c2 0 3.8.8 5.2 2L11.4 5.6C10.3 4.6 9 4 7.5 4S4.7 4.6 3.6 5.6L2.3 4.2C3.7 3 5.5 2.2 7.5 2.2z" fill="#1B1E24"/><circle cx="7.5" cy="9" r="1.5" fill="#1B1E24"/></svg>
+        <svg width="24" height="11" viewBox="0 0 24 11"><rect x=".5" y=".5" width="20" height="10" rx="2.6" fill="none" stroke="#1B1E24"/><rect x="2" y="2" width="15" height="7" rx="1.4" fill="#1B1E24"/><rect x="21.3" y="3.4" width="1.8" height="4.2" rx=".9" fill="#1B1E24"/></svg>
+      </span></div>
+      <div class="content">
+        <div class="appbar">
+          <div class="title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B606B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            大学物理（下）</div>
+          <div class="icon-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B606B" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="13" height="18" rx="2" transform="rotate(0)"/><path d="M9 17H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2"/></svg>
+          </div>
+        </div>
+        <div class="seg"><span>全部记录</span><span class="on">提问列表<span class="n">7</span></span></div>
+        <div class="qlist">
+          <div class="q-item">
+            <div class="qi-top"><span>14:12:24</span><span>已复制</span></div>
+            <div class="qi-q">什么是麦克斯韦方程组？</div>
+            <div class="qi-act"><span class="red">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#D92525" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>复制</span><span>问 AI</span><span>定位原文</span></div>
+          </div>
+          <div class="q-item">
+            <div class="qi-top"><span>14:21:07</span></div>
+            <div class="qi-q">位移电流和传导电流有什么区别？</div>
+            <div class="qi-act"><span class="red">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#D92525" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>复制</span><span>问 AI</span><span>定位原文</span></div>
+          </div>
+          <div class="q-item">
+            <div class="qi-top"><span>14:33:52</span></div>
+            <div class="qi-q">谁能说一下法拉第电磁感应定律的数学表达式？</div>
+            <div class="qi-act"><span class="red">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#D92525" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>复制</span><span>问 AI</span><span>定位原文</span></div>
+          </div>
+          <div class="q-item">
+            <div class="qi-top"><span>14:45:18</span></div>
+            <div class="qi-q">积分形式和微分形式之间如何互相推导？</div>
+            <div class="qi-act"><span class="red">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#D92525" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>复制</span><span>问 AI</span><span>定位原文</span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <div class="screen-label"><div class="sl-t">⑥ 会话详情 · 提问列表</div><div class="sl-d">「全部记录 / 提问列表」双 Tab；单条复制、一键问 AI、跳回转录原文位置</div></div>
+  </div>
+
+</div>
+
+<!-- ============ 设计规范 & 技术映射 ============ -->
+<div class="spec">
+  <h2>设计令牌（Design Tokens）</h2>
+  <div class="spec-grid">
+    <div class="swatch"><div class="c" style="background:#2E6BE6"></div><div class="w"><b style="color:#fff">品牌蓝 #2E6BE6</b><br>主按钮 / 链接 / 品牌</div></div>
+    <div class="swatch"><div class="c" style="background:#F23C3C"></div><div class="w"><b style="color:#fff">录音红 #F23C3C</b><br>录音状态 / 提问警示</div></div>
+    <div class="swatch"><div class="c" style="background:#FFF3F2;border-bottom:1px solid #EDF0F4"></div><div class="w">提问卡片底 #FFF3F2<br>边框 #FFDAD7</div></div>
+    <div class="swatch"><div class="c" style="background:#EAF1FF;border-bottom:1px solid #EDF0F4"></div><div class="w">浅蓝衬底 #EAF1FF<br>辅助操作按钮</div></div>
+    <div class="swatch"><div class="c" style="background:#F4F6F9;border-bottom:1px solid #EDF0F4"></div><div class="w">页面背景 #F4F6F9<br>卡片 #FFFFFF</div></div>
+    <div class="swatch"><div class="c" style="background:#1B1E24"></div><div class="w"><b style="color:#fff">墨黑 #1B1E24</b><br>正文 / 胶囊岛底色</div></div>
+  </div>
+
+  <div class="spec-cols">
+    <div class="spec-col">
+      <h4>还原 iOS 原版的关键结构</h4>
+      <ul>
+        <li>红色「正在录音 + 计时器」状态条，常驻转录区顶部</li>
+        <li>普通讲课行：时间戳（灰）+ 正文；提问独立成卡片，不混入文本流</li>
+        <li>提问卡片两级：可能被提问（关键词预警）→ 问题回溯（核心问句）</li>
+        <li>底部悬浮圆形控制组：停止 / 复制 / 问 AI / 标记</li>
+        <li>命中瞬间：震动 + 顶部胶囊（iOS 灵动岛）展开问题与「有提问」标签</li>
+      </ul>
+    </div>
+    <div class="spec-col">
+      <h4>Android 版相对原版的增强</h4>
+      <ul>
+        <li>新增模型下载页（iOS 靠系统 Speech 框架，安卓必须动态下发）</li>
+        <li>中英 / 中英混合识别语言切换、会话搜索、一键问 AI 入口前置</li>
+        <li>Material 3 圆角卡片与 FAB，适配深色模式与大屏/横屏（后置）</li>
+        <li>电池优化白名单、后台保活引导（小米/vivo 杀后台重灾区）</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 style="margin-top:30px;">「安卓灵动岛」四级承接策略（按运行环境自动降级）</h2>
+  <div class="layer-flow">
+    <div class="layer cool"><b>L0 应用内胶囊</b><br>App 在前台 · 顶部自绘动画胶囊 · 零权限</div>
+    <span class="arrow">→</span>
+    <div class="layer hot"><b>L1 厂商原生岛</b><br>小米超级岛 miui.focus.param<br>vivo 原子岛 原子通知字段（需上架+邮件申请）</div>
+    <span class="arrow">→</span>
+    <div class="layer"><b>L2 悬浮窗胶囊</b><br>SYSTEM_ALERT_WINDOW 自绘<br>未获厂商授权时的全局方案（dynamicSpot 原理）</div>
+    <span class="arrow">→</span>
+    <div class="layer"><b>L3 前台服务通知</b><br>foregroundServiceType=microphone<br>所有机型兜底，Android 14+ 自带录音指示</div>
+  </div>
+</div>
+
+<p class="foot">
+说明：本设计稿为 Android 移植方案的界面示意（非官方界面、非真实截图），界面结构与文案依据水课帮 App Store 官方截图、官方实机演示视频转写整理；课堂问题文本为官方演示中的示例。技术选型结论：iOS 版本体仅 1.82MB 是因为使用系统 SFSpeechRecognizer，Android 无等价系统能力，故采用 sherpa-onnx 真流式 Zipformer（中英双语 small，INT8 整套约 28MB，边说边出字）从 GitHub Release 动态下发，APK 本体保持数 MB。
+</p>
+
+</body>
+</html>

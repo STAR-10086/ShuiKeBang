@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 仅作为启动主题，界面内容全部由 Jetpack Compose 渲染 -->
+    <style name="Theme.Shuikebang" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/page_bg</item>
+        <item name="android:navigationBarColor">@color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/page_bg</item>
+    </style>
+</resources>
