@@ -52,6 +52,11 @@ class QuestionDetector(
         val callStrong = QuestionRules.ZH_CALL_STRONG.firstOrNull { raw.contains(it) }
         val callWeak = QuestionRules.ZH_CALL_WEAK.firstOrNull { raw.contains(it) }
 
+        // 自问自答：疑问结构之后紧跟解答引导词、且句末不是问号 → 老师在自己讲解，不提醒
+        val anchorStrong = strong ?: strongSoft
+        val selfAnswered = anchorStrong != null && !hasQuestionMark &&
+            isSelfAnswered(raw, anchorStrong)
+
         val body = raw.trimEnd('.', '。', '!', '！', ',', '，', '?', ' ', '呢', '吧', '吗')
         val lastChar = raw.trimEnd('.', '。', '!', '！', ',', '，', ' ').lastOrNull()?.toString()
         val tailMa = lastChar == QuestionRules.ZH_TAIL_MA
@@ -62,17 +67,21 @@ class QuestionDetector(
         // 旁证2：弱疑问词落在句末（"结果等于多少""你选哪个"类）
         val weakAtTail = weak != null &&
             body.length - (raw.indexOf(weak) + weak.length) <= 3
-        val weakCorroborated = !inLecture && weak != null &&
+        val weakCorroborated = !inLecture && !selfAnswered && weak != null &&
             (tailSoft || callStrong != null || weakAtHead || weakAtTail)
+        // 自问自答时强疑问结构同样不成立（带问号的真问句除外）
+        val strongHolds = !selfAnswered
 
         val confirmed = when (sensitivity) {
             DetectSensitivity.HIGH ->
-                hasQuestionMark || tailMa || strong != null || strongSoft != null ||
-                    weak != null || callStrong != null
+                hasQuestionMark || tailMa ||
+                    (strongHolds && (strong != null || strongSoft != null || weak != null)) ||
+                    callStrong != null
             DetectSensitivity.NORMAL ->
-                hasQuestionMark || tailMa || strong != null || strongSoft != null || weakCorroborated
+                hasQuestionMark || tailMa ||
+                    (strongHolds && (strong != null || strongSoft != null)) || weakCorroborated
             DetectSensitivity.LOW ->
-                hasQuestionMark || tailMa || strong != null
+                hasQuestionMark || tailMa || (strongHolds && strong != null)
             DetectSensitivity.OFF -> false
         }
 
@@ -88,6 +97,17 @@ class QuestionDetector(
             callStrong != null -> l1(callStrong, raw, core)
             callWeak != null && sensitivity == DetectSensitivity.HIGH -> l1(callWeak, raw, core)
             else -> null
+        }
+    }
+
+    /** 疑问锚点之后（至少隔一个字）是否出现解答引导词 */
+    private fun isSelfAnswered(raw: String, anchor: String): Boolean {
+        val start = raw.indexOf(anchor)
+        if (start < 0) return false
+        val after = start + anchor.length
+        return QuestionRules.ZH_ANSWER_CUE.any { cue ->
+            val i = raw.indexOf(cue, after)
+            i > after
         }
     }
 

@@ -174,4 +174,24 @@ class QuestionDetectorTest {
         assertNull(off.detect("什么是线性回归？"))
         assertNull(off.detect("哪位同学来回答一下"))
     }
+
+    // ---------- 自问自答：老师抛出问题后紧接着自己解答，不应提醒 ----------
+
+    @Test
+    fun zh_self_answering_not_flagged() {
+        val self = listOf(
+            "什么是梯度呢，梯度就是一个向量",
+            "那么什么叫做递归，所谓递归就是自己调用自己",
+            "它是什么，它是一个线性算子",
+            "这里的关键是什么，其实是约束条件",
+            "什么是惯性，指的是物体保持运动状态的性质",
+        )
+        for (s in self) {
+            val r = detector.detect(s)
+            assertTrue("自问自答被误判: $s -> $r", r == null)
+        }
+        // 没有自答、真正向学生提问的仍要命中
+        assertEquals(2, detector.detect("什么是梯度下降")!!.level)
+        assertEquals(2, detector.detect("什么是线性回归？")!!.level)
+    }
 }

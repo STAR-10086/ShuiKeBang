@@ -6,8 +6,10 @@ pluginManagement {
         maven { url = uri("https://maven.aliyun.com/repository/central") }
         google {
             content {
+                // 只圈定 Android 相关 group；com.google.devtools.ksp 不在 Google maven，
+                // 若写成 com.google.* 会把 KSP 错误圈入，导致 CI 全新环境解析插件失败
                 includeGroupByRegex("com\\.android.*")
-                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("com\\.google\\.android.*")
                 includeGroupByRegex("androidx.*")
             }
         }
