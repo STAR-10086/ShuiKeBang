@@ -23,9 +23,24 @@ data class AsrModelSpec(
     // bilingual / zh-14M 系列在 sherpa 中注册类型为 "zipformer"
     val modelType: String = "zipformer",
 ) {
-    /** 下载候选地址：国内镜像优先（官方 release 直连国内会超时），官方源末尾兜底 */
+    /** 自动模式候选地址：国内镜像优先（官方 release 直连国内会超时），官方源末尾兜底 */
     val downloadCandidates: List<String>
         get() = mirrorUrls + listOfNotNull(archiveUrl)
+
+    /**
+     * 按用户选择的下载源返回候选顺序：首选选中源，失败时仍自动回退到其余源。
+     * sourceId 取值见 DownloadSource；mirrorUrls 顺序与镜像源一一对应（0=ghfast,1=gh-proxy）。
+     */
+    fun candidatesFor(sourceId: String): List<String> {
+        val all = downloadCandidates
+        val preferred = when (sourceId) {
+            DownloadSource.GITHUB -> archiveUrl
+            DownloadSource.GHFAST -> mirrorUrls.getOrNull(0)
+            DownloadSource.GHPROXY -> mirrorUrls.getOrNull(1)
+            else -> null
+        } ?: return all
+        return listOf(preferred) + all.filter { it != preferred }
+    }
 }
 
 data class AsrModelFile(

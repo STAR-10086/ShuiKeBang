@@ -67,8 +67,9 @@ class ModelManager private constructor(context: Context) {
         return BuiltinModels.ALL.firstOrNull { isReady(it) }
     }
 
-    /** 下载并解压模型，进度通过 stateFlow 暴露 */
-    suspend fun ensureModel(spec: AsrModelSpec) = withContext(Dispatchers.IO) {
+    /** 下载并解压模型，进度通过 stateFlow 暴露；sourceId 指定首选下载源，见 DownloadSource */
+    suspend fun ensureModel(spec: AsrModelSpec, sourceId: String = DownloadSource.AUTO) =
+        withContext(Dispatchers.IO) {
         val state = _states.getOrPut(spec.id) { MutableStateFlow(ModelState.NotExist) }
         if (isReady(spec)) {
             state.value = ModelState.Ready
@@ -79,7 +80,7 @@ class ModelManager private constructor(context: Context) {
             if (spec.files.isNotEmpty()) {
                 downloadFiles(spec, dir, state)
             } else {
-                downloadAndExtractArchive(spec, dir, state)
+                downloadAndExtractArchive(spec, dir, state, sourceId)
             }
             if (!isReady(spec)) error("解压完成但模型文件缺失")
             state.value = ModelState.Ready
@@ -110,8 +111,9 @@ class ModelManager private constructor(context: Context) {
         spec: AsrModelSpec,
         dir: File,
         state: MutableStateFlow<ModelState>,
+        sourceId: String,
     ) {
-        val candidates = spec.downloadCandidates
+        val candidates = spec.candidatesFor(sourceId)
         check(candidates.isNotEmpty()) { "模型没有可用的下载地址" }
         val archiveName = candidates.first().substringAfterLast('?').substringAfterLast('/')
             .ifBlank { "model.bin" }

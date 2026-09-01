@@ -23,3 +23,5 @@ build-log.txt
 build-release-log.txt
 build-test-log.txt
 *.log
+build-check-log.txt
+build-*-log.txt

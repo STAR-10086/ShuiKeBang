@@ -17,6 +17,8 @@ import com.star.shuikebang.asr.ModelState
 import com.star.shuikebang.asr.SherpaStreamEngine
 import com.star.shuikebang.asr.StreamAsrCallback
 import com.star.shuikebang.data.db.ClassRepository
+import com.star.shuikebang.data.prefs.AppSettings
+import com.star.shuikebang.data.prefs.SettingsRepository
 import com.star.shuikebang.data.db.QuestionEntity
 import com.star.shuikebang.data.db.TranscriptEntity
 import com.star.shuikebang.feedback.Hapticx
@@ -41,6 +43,8 @@ class RecordService : LifecycleService() {
     private var spec: AsrModelSpec? = null
     private var tickerJob: Job? = null
     private var startJob: Job? = null
+    private lateinit var settingsRepo: SettingsRepository
+    @Volatile private var cfg: AppSettings = AppSettings()
 
     // 提问去重冷却：同一句 4 秒内不重复提醒
     private var lastQuestionText: String = ""
@@ -52,6 +56,7 @@ class RecordService : LifecycleService() {
         models = ModelManager.get(this)
         detector = QuestionDetector(DetectSensitivity.NORMAL)
         island = StatusIsland(this)
+        settingsRepo = SettingsRepository.get(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -81,6 +86,9 @@ class RecordService : LifecycleService() {
 
         startJob = lifecycleScope.launch(Dispatchers.IO) {
             try {
+                cfg = settingsRepo.snapshot()
+                detector.setSensitivity(cfg.sensitivity)
+                island.overlayEnabled = cfg.overlayCapsule
                 val chosen = BuiltinModels.byId(modelId)
                 spec = chosen
                 // 模型未就绪则下载，并把进度桥接到录制页（避免界面卡在无反馈的"记录中"）
@@ -95,7 +103,7 @@ class RecordService : LifecycleService() {
                             RecSession.update { it.copy(prepareMsg = msg) }
                         }
                     }
-                    models.ensureModel(chosen)
+                    models.ensureModel(chosen, cfg.downloadSourceId)
                     bridge.cancel()
                 }
                 RecSession.update { it.copy(prepareMsg = "正在加载识别引擎…") }
@@ -166,7 +174,8 @@ class RecordService : LifecycleService() {
         val sid = RecSession.state.value.sessionId ?: return
 
         lifecycleScope.launch(Dispatchers.IO) {
-            if (detection == null) {
+            // 用户关闭 L1 预警时，一级疑似按普通讲课行处理，不进提问列表
+            if (detection == null || (detection.level == 1 && !cfg.showL1Suspect)) {
                 repo.addTranscript(sid, now, clean)
                 RecSession.update {
                     it.copy(lines = it.lines + UtteranceLine(now, clean, 0))
@@ -201,7 +210,7 @@ class RecordService : LifecycleService() {
             if (!isDup && detection.level == 2) {
                 lastQuestionText = clean
                 lastQuestionTs = now
-                Hapticx.questionAlert(this@RecordService)
+                if (cfg.vibrateOnQuestion) Hapticx.questionAlert(this@RecordService)
                 island.onQuestion(qid, detection.coreQuestion, detection.rawSentence)
                 RecSession.emitQuestion(question)
             }

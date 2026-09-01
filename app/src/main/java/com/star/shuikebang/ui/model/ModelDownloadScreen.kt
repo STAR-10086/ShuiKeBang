@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -55,6 +56,7 @@ fun ModelDownloadScreen(
 ) {
     val spec by vm.selectedSpec.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
+    val sourceId by vm.sourceId.collectAsStateWithLifecycle()
 
     Column(
         Modifier
@@ -92,6 +94,8 @@ fun ModelDownloadScreen(
                     onClick = { vm.select(m.id) },
                 )
             }
+
+            SourceCard(currentId = sourceId, onSelect = vm::selectSource, options = vm.sourceOptions)
 
             Spacer(Modifier.height(4.dp))
             DownloadCard(spec = spec, state = state, onDownload = vm::download)
@@ -174,6 +178,43 @@ private fun DownloadCard(spec: AsrModelSpec, state: ModelState, onDownload: () -
             "仅模型下载需要联网，识别过程全程离线；建议在 WiFi 下下载。",
             color = TextSub, fontSize = TextUnit(11f, TextUnitType.Sp),
         )
+    }
+}
+
+@Composable
+private fun SourceCard(
+    currentId: String,
+    onSelect: (String) -> Unit,
+    options: List<com.star.shuikebang.asr.DownloadSource.Option>,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardWhite)
+            .padding(vertical = 6.dp),
+    ) {
+        Text(
+            "下载源（国内直连建议选加速镜像）",
+            color = TextMain, fontSize = TextUnit(13f, TextUnitType.Sp),
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+        options.forEach { o ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(o.id) }
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(o.label, color = TextMain, fontSize = TextUnit(13f, TextUnitType.Sp))
+                    Text(o.hint, color = TextSub, fontSize = TextUnit(10.5f, TextUnitType.Sp), modifier = Modifier.padding(top = 2.dp))
+                }
+                if (o.id == currentId) Icon(Icons.Outlined.Check, "已选", tint = Brand)
+            }
+        }
     }
 }
 

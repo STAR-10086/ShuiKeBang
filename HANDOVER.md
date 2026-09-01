@@ -4,7 +4,7 @@
 
 ## 0. 一句话现状
 
-仿照 iOS「水课帮」的 Android App（包名 `com.star.shuikebang`）已完成全部编码，debug+release 编译通过、12 个单测全绿。模型分发已从 k2-fsa 官方 437MB 整包切换到**本仓库自建 GitHub Release（tag `asr-models-v1`，已上传两个精简 zip）**，并修复了"模型没起来时录制页卡在假'正在记录中 00:00'"的链路问题（准备中进度可见、失败弹窗退回）。**网络实测结论：GitHub Release 直连国内超时不通；ghfast.top / gh-proxy.com 两个加速镜像不走代理直连 200 且大小正确（ghproxy.net 已失效移除），故代码里下载顺序为「镜像优先、官方兜底」。接手时若 git 尚未 push 完成，按 §5 收尾。**
+**第一轮代码已推送到 main、模型 Release `asr-models-v1` 已建好（两个 zip 已上传）。** 第二轮根据用户真机/体验反馈完成 5 项改动（历史详情闪退修复、提问检测大幅降误报并支持四档灵敏度、新增设置页、模型下载源可手动选择、README 重写），本地 `compileDebugKotlin + testDebugUnitTest` 已通过、单测扩到 19 个全绿，release APK 已重新打出，**但用户要求先在本地真机自测，确认后再由下一轮执行 git 提交/推送并发 Release（见 §5）。** 模型网络实测：GitHub Release 直连国内超时，ghfast.top / gh-proxy.com 不走代理直连 200 且大小正确（ghproxy.net 已失效移除），默认「镜像优先、官方兜底」。
 
 ## 1. 本机环境（已核实，直接用）
 
@@ -25,7 +25,7 @@
 
 ## 2. 仓库与产物规划（重要）
 
-- GitHub 仓库：`https://github.com/STAR-10086/ShuiKeBang`，默认分支 main，目前仅有一个 LICENSE（空仓库）。
+- GitHub 仓库：`https://github.com/STAR-10086/ShuiKeBang`，默认分支 main。**第一轮源码已推送（含 LICENSE 共两个 commit）；模型 Release `asr-models-v1` 已创建并上传两个 zip，直链可用。第二轮改动尚未提交（用户要求先真机自测）。**
 - **源码走 git main；模型二进制走 GitHub Release，绝不进 git 历史**（.gitignore 已排除 /dist-models、/research、build、local.properties）。
 - 模型 Release 规划：tag `asr-models-v1`，上传两个 asset：
   - `small-bilingual-zh-en-int8.zip`（50.0MB，52,430,525 字节，**推荐**，中英双语）
@@ -42,7 +42,7 @@
     ```
   - **已实测（2026-09-01，curl --noproxy 不走代理）**：GitHub Release 直连国内超时（curl exit 28）；`ghfast.top/`、`gh-proxy.com/` 前缀镜像返回 200 且 Content-Length 正确；`ghproxy.net` SSL 失败已移除。AsrModels.kt 下载顺序已改为镜像优先、官方源末尾兜底，OkHttp connectTimeout=8s 让坏源快速跳过。若日后这两个公共镜像也失效，换前缀或上 R2，只改 GITHUB_MIRROR_PREFIXES / archiveUrl。
 
-## 3. 工程结构（39 个 Kotlin 文件，包 com.star.shuikebang）
+## 3. 工程结构（约 44 个 Kotlin 文件，包 com.star.shuikebang）
 
 | 包/文件 | 职责与关键点 |
 |---|---|
@@ -50,8 +50,11 @@
 | `asr/ModelManager.kt` | OkHttp 下载（.part 断点续传、sha256 可选）、zip/tar 解压到 filesDir/models/<id>/；**archive 下载已实现多源回退**（逐个 candidate，失败删 part 换下一个）；单例 |
 | `asr/AudioCapture.kt` | AudioRecord，VOICE_RECOGNITION/16k/mono/PCM16/100ms 帧，short→float，音频只在内存不落盘 |
 | `asr/SherpaStreamEngine.kt` | sherpa OnlineRecognizer 真流式封装。**API 签名已逐字核对官方源码**：字段是 `decodingMethod`（不是 decodeMethod）；modelType="zipformer"；Endpoint 三规则 rule1(false,2.4,0)/rule2(true,1.2,0)/rule3(false,0,20)；acceptWaveform(FloatArray,Int)；isReady→decode 循环；isEndpoint 断句后 reset |
-| `nlp/` | TextNorm 归一 + QuestionRules 中英规则 + QuestionDetector 两级判定（L1 点名祈使预警/L2 疑问词·问号·句末"吗"确认）。**曾修过严重 bug：规则"吗?"被当正则导致任何句子都命中，已改为句末字精确匹配，"呢/嘛"不单独成证。** 12 个 JVM 单测在 app/src/test，全绿 |
+| `nlp/` | TextNorm 归一 + QuestionRules 中英规则 + QuestionDetector 两级判定。**第二轮重构降误报**：信号分 ZH_STRONG 核心强 / ZH_STRONG_SOFT 次强(如何) / ZH_WEAK 弱词(需旁证) / ZH_LECTURE 讲课框架否决 / 点名硬软两档；DetectSensitivity 增加 OFF，共 HIGH/NORMAL/LOW/OFF 四档。历史 bug：规则"吗?"曾被当正则导致句句命中，已改句末字精确匹配。20 个 JVM 单测全绿 |
 | `data/db/` | Room 三表 Session/Transcript/Question（外键级删）+ Daos + ClassRepository 单例 |
+| `data/prefs/SettingsRepository.kt` | **第二轮新增**：DataStore 偏好，AppSettings（震动/灵敏度/悬浮胶囊/L1 开关/下载源），单例，flow + suspend snapshot() |
+| `asr/DownloadSource.kt` | **第二轮新增**：下载源枚举（auto/ghfast/ghproxy/github）与选项文案；AsrModelSpec.candidatesFor(sourceId) 按选择排序候选、失败仍回退 |
+| `ui/settings/` | **第二轮新增**：SettingsScreen + SettingsViewModel，分组设置页（灵敏度/震动/悬浮胶囊/L1/下载源/隐私） |
 | `service/RecSession.kt` | 全局录制状态单例 StateFlow + 提问事件 SharedFlow；RecUiState 含 recording/starting/prepareMsg/error 等 |
 | `service/RecordService.kt` | LifecycleService，串联：前台麦克风服务→(按需下载模型,进度桥接到 prepareMsg)→引擎 init/start→建会话→采集→检测→入库→震动→状态岛。startJob 可在停止时取消；失败写 error 并 stopSelfClean |
 | `island/` | 四级状态展示 StatusIsland 门面：L1 小米超级岛/vivo 原子岛（纯本地通知无 Push，VendorIslandNotifier，**字段按公开文档写、未经真机校准**）→L2 OverlayCapsule 悬浮胶囊（默认关）→L3 FgsNotifier 常驻通知→L4 应用内状态条 |
@@ -68,22 +71,29 @@
    - RecordScreen：preparing 时中央显示准备提示；观察 ui.error 弹 AlertDialog，确认后 RecSession.reset()+onStopped() 回首页（不再卡死）；停止可取消下载协程。
 4. 首页模型大小文案 28MB→50MB。
 
+## 4b. 第二轮改动明细（2026-09-01，真机反馈后）
+
+1. **历史详情闪退（用户：只有第一条会闪退）**：根因是 SessionDetailScreen 同一个 LazyColumn 内 questions 用 `it.id`、transcripts 也用 `it.id` 当 key，两表各自从 1 自增，**会话同时含提问+转录时 key 重复崩溃**；第一条恰是唯一含提问的会话。已改为 `"q_${id}" / "t_${id}" / 固定 header key`。
+2. **提问误报多（用户：老师普通说话也被判提问）**：见 §3 nlp 行的规则重构。弱词（什么/怎么/几个/是不是/区别…）单独不判，需句末语气词/点名短语/句首(仅有没有·是不是等)/句末旁证，且被"下面我们/区别在于/分为"等讲课框架词否决；新增一批"讲课句不得误报"单测。
+3. **设置页**：新增 data/prefs + ui/settings；RecordService 启动时 snapshot() 应用灵敏度/悬浮胶囊/下载源，L2 震动受震动开关控制，关闭 L1 时一级疑似按普通转录行处理不进提问列表；IdleScreen 右上角齿轮进入，Routes.SETTINGS。
+4. **下载源可选**：DownloadSource + AsrModelSpec.candidatesFor()，ModelManager.ensureModel(spec, sourceId)；模型下载页与设置页都能选源，选中源优先、失败仍自动回退其余源。
+5. **README 重写**：面向开发者，加徽章/目录/mermaid 数据流/快速开始/规则调法/状态岛/自测清单。
+
 ## 5. 接手后第一步（按序）
 
-1. 先跑一次 `:app:assembleDebug :app:testDebugUnitTest` 确认本轮改动编译通过、单测仍全绿（上一次失败仅因 Downloading 漏写 `: ModelState`，已修，需复跑确认）。
-2. 再 `:app:assembleRelease` 出新 APK。
-3. 按 §2 建 GitHub Release 上传两个 zip，**不走代理**实测直链；把结果（可达/不可达、是否需要镜像）告诉用户。
-4. git 初始化并推送（仓库已有 LICENSE，先 pull --rebase 或 merge 再 push）：
+> 前提：用户要先在真机装第二轮的 release APK 自测；他确认 OK 后才做下面的提交/发版。
+
+1. 复跑 `:app:assembleDebug :app:testDebugUnitTest` 与 `:app:assembleRelease` 确认绿（第二轮本地已通过，提交前再确认一次）。
+2. 提交第二轮改动并推送（remote 已配为 HTTPS + gh 凭据，推送前 `$env:HTTPS_PROXY='http://127.0.0.1:7897'`；SSH 22 端口在本机不通，别改回 ssh）：
    ```powershell
    cd D:\Develop\ShuiKeBang
-   git init; git branch -M main
-   git remote add origin git@github.com:STAR-10086/ShuiKeBang.git   # 已存在则 set-url
-   git add -A; git commit -m "feat: 水课帮 Android 初始版本（离线流式ASR+提问检测+本地存储+厂商岛）"
-   git pull origin main --allow-unrelated-histories   # 合并 LICENSE
-   git push -u origin main
+   git add -A
+   git commit -m "fix: 修复历史详情闪退、降低提问误报，新增设置页与下载源选择，重写 README"
+   git push origin main
    ```
-   推送前用 `git status`/`git ls-files` 确认 research、dist-models、build、local.properties **没有**被暂存。
-5. present_files 向用户交付新 release APK。
+   提交前 `git status` 确认 research、dist-models、build、local.properties 未被暂存（.gitignore 已排除）。
+3. 若本轮 APK 要作为正式发行版，用 gh 建一个 App Release（如 tag `app-v0.1.0`）上传 app-release.apk；模型 Release `asr-models-v1` 已存在、模型没变，**不要重建**。
+4. present_files 交付最终 release APK。
 
 ## 6. 已知坑点 / 不要踩
 

@@ -14,6 +14,7 @@ import com.star.shuikebang.ui.history.SessionDetailScreen
 import com.star.shuikebang.ui.idle.IdleScreen
 import com.star.shuikebang.ui.model.ModelDownloadScreen
 import com.star.shuikebang.ui.record.RecordScreen
+import com.star.shuikebang.ui.settings.SettingsScreen
 
 @Composable
 fun AppNav(openQuestionId: Long? = null) {
@@ -35,6 +36,7 @@ fun AppNav(openQuestionId: Long? = null) {
                 },
                 onOpenHistory = { nav.navigate(Routes.HISTORY) },
                 onOpenModel = { nav.navigate(Routes.MODEL) },
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
             )
         }
 
@@ -46,6 +48,10 @@ fun AppNav(openQuestionId: Long? = null) {
             RecordScreen(onStopped = {
                 nav.popBackStack(Routes.HOME, inclusive = false)
             })
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { nav.popBackStack() })
         }
 
         composable(Routes.HISTORY) {

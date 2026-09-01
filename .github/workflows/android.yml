@@ -1,0 +1,96 @@
+name: Android CI & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write   # tag 构建时创建/上传 Release 需要
+
+jobs:
+  # 普通提交 / PR：编译 + 单元测试门禁
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  # 仅在打 v* tag 时运行：构建 arm64 / arm-v7a / universal 三个 release 包并发 Release
+  release:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build split release APKs (arm64-v8a / armeabi-v7a / universal)
+        run: ./gradlew :app:assembleRelease -PsplitAbi --no-daemon --stacktrace
+
+      - name: Rename APKs with version
+        run: |
+          V="${GITHUB_REF_NAME}"
+          cd app/build/outputs/apk/release
+          mv app-arm64-v8a-release.apk      "shuikebang-${V}-arm64-v8a.apk"
+          mv app-armeabi-v7a-release.apk    "shuikebang-${V}-armeabi-v7a.apk"
+          mv app-universal-release.apk     "shuikebang-${V}-universal.apk"
+          ls -lh
+
+      - name: Create GitHub Release and upload APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "水课帮 Android ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            app/build/outputs/apk/release/shuikebang-*-arm64-v8a.apk
+            app/build/outputs/apk/release/shuikebang-*-armeabi-v7a.apk
+            app/build/outputs/apk/release/shuikebang-*-universal.apk
+          body: |
+            课堂提问助手 Android 首个可用版本。麦克风实时收音 → 本地离线流式语音识别 → 轻量规则检测老师提问 → 震动/高亮/问题回溯，全程不保存录音、不上传音频。
+
+            ### 下载说明（按手机架构选择）
+            - **arm64-v8a**：2019 年后绝大多数手机，体积最小，优先选它。
+            - **armeabi-v7a**：老旧 32 位 ARM 手机。
+            - **universal**：全架构通用包，体积最大，不确定架构时选它。
+
+            > 安装后首次点“开始记录”会下载离线识别模型（仅这一步联网，建议 WiFi）；模型不打进 APK。release 目前使用 debug 签名，可直接侧载安装。

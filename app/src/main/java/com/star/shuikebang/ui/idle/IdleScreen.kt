@@ -29,7 +29,9 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -60,6 +62,7 @@ fun IdleScreen(
     onStartRecording: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenModel: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
     val modelReady by produceState(initialValue = false) {
@@ -76,7 +79,15 @@ fun IdleScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(72.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(top = 32.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Outlined.Settings, "设置", tint = TextSub)
+            }
+        }
+        Spacer(Modifier.height(48.dp))
         Text("水课帮", color = TextMain, fontSize = TextUnit(28f, TextUnitType.Sp), fontWeight = FontWeight.Bold)
         Text(
             "课堂提问助手 · 走神也能秒回溯",

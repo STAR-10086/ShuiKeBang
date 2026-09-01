@@ -76,7 +76,7 @@ fun SessionDetailScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (questions.isNotEmpty()) {
-                item {
+                item(key = "q_header") {
                     Text(
                         "老师提问 · ${questions.size}",
                         color = TextMain,
@@ -85,11 +85,11 @@ fun SessionDetailScreen(
                         modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
                     )
                 }
-                items(questions, key = { it.id }) { q ->
+                items(questions, key = { "q_${it.id}" }) { q ->
                     QuestionCard(question = q, onCopy = { Clip.copy(context, it.coreQuestion, "问题已复制") })
                 }
             }
-            item {
+            item(key = "t_header") {
                 Text(
                     "完整转录",
                     color = TextMain,
@@ -99,9 +99,9 @@ fun SessionDetailScreen(
                 )
             }
             if (transcripts.isEmpty()) {
-                item { Text("暂无转录内容", color = TextFaint, fontSize = TextUnit(12f, TextUnitType.Sp)) }
+                item(key = "t_empty") { Text("暂无转录内容", color = TextFaint, fontSize = TextUnit(12f, TextUnitType.Sp)) }
             }
-            items(transcripts, key = { it.id }) { t ->
+            items(transcripts, key = { "t_${it.id}" }) { t ->
                 Column(
                     Modifier
                         .fillMaxWidth()

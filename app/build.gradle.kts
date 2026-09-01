@@ -5,6 +5,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// 传 -PsplitAbi 时按 ABI 拆分并额外产出 universal 全包（CI 发 Release 用）
+val splitAbi = project.hasProperty("splitAbi")
+
 android {
     namespace = "com.star.shuikebang"
     compileSdk = 34
@@ -17,15 +20,30 @@ android {
         versionName = "0.1.0"
         vectorDrawables { useSupportLibrary = true }
         ndk {
-            // 只打 arm64-v8a 以控制 APK 体积；debug 额外保留 x86_64 供模拟器调试
-            abiFilters += "arm64-v8a"
+            if (splitAbi) {
+                // CI 分架构：只保留两个 ARM 架构，否则 universal 会把 AAR 自带的 x86/x86_64 也打进去
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            } else {
+                // 本地常规构建只打 arm64 以提速（debug 另在 buildTypes 追加 x86_64 供模拟器）
+                abiFilters += "arm64-v8a"
+            }
+        }
+    }
+
+    // 分架构打包：arm64-v8a / armeabi-v7a 各一个，再加一个 universal 全架构包
+    splits {
+        abi {
+            isEnable = splitAbi
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = true
         }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
-            ndk { abiFilters += "x86_64" }
+            if (!splitAbi) ndk { abiFilters += "x86_64" }
         }
         release {
             isMinifyEnabled = true
