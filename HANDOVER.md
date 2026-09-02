@@ -183,3 +183,51 @@
 3. release 目前用 debug 签名，正式上架需自建 keystore 并在 CI 配 secrets。
 4. 小米/vivo 厂商岛 extras 字段仍需真机校准（不支持则降级 L3 通知）；目标机型/系统版本待用户提供。
 5. 公共 GitHub 镜像前缀日后失效则换前缀或迁 R2（只改 AsrModels.kt/DownloadSource.kt）。
+
+
+---
+
+## 10. 第四轮：静态代码审查 8 项加固（commit 02de152 + 1061e8c，CI verify 全绿）
+
+针对一份外部静态审查逐项修复，CI（单测 + lintDebug + assembleDebug）已全部通过。
+
+### 10.1 已修复与关键实现
+1. **停止录音原生并发（高）**：`RecordService.stopRecording` 改为严格顺序——先 `capture?.stop()`
+   （AudioCapture.stop 内部 `worker.join(400)` 等采集线程退出，此后不再有 accept/onFinal）→
+   `engine?.flush()` 取残句 → 等入库 → 最后在 `stopSelfClean()` 里 `engine.release()`。
+   杜绝同一 OnlineStream 被 accept 与 flush 并发操作导致的 native 崩溃/残句重复丢失。
+2. **入库竞态（高）**：删除固定 `delay(150)`。每个 `handleFinal` 的入库协程经 `trackWrite(job)`
+   登记进线程安全集合 `writeJobs`（invokeOnCompletion 自动移除）；停止时
+   `synchronized(writeJobs){toList()}.joinAll()` 等全部落库再 `finishSession`，保证最后一句不丢、questionCount 准确。
+3. **状态原子更新（高）**：`RecSession.update/reset` 改用 `kotlinx.coroutines.flow.update`（CAS 原子），
+   消除多线程"读-改-写"互相覆盖导致转录行从 UI 消失。
+4. **解压安全（中高）**：新增纯 JVM、无 Android 依赖的 `asr/ArchiveSafety.kt`（`safeResolve`：
+   反斜杠归一、去前导/、拒绝 `..` 段、canonical 路径越界兜底），zip/tar 都走它；tar 额外拒绝符号链接。
+   单测 `ArchiveSafetyTest` 覆盖正常/`..`/深层/反斜杠穿越/空名。两个模型整包补固定 SHA-256（见 §10.3）。
+5. **原子安装**：解压到 `.${id}.staging` 临时目录 → 校验四个必需文件 → 写 `.ready` 标志 →
+   删旧目录 + `renameTo` 原子替换（失败退化为 copyRecursively）；`isReady()` 额外要求 `.ready` 存在，
+   半成品不会被误判可用。
+6. **并发下载**：`ensureModel` 按 modelId 用 `Mutex.withLock` 串行化整个下载/校验/安装；
+   states/locks 均为 `ConcurrentHashMap`。
+7. **隐私一致**：`android:allowBackup="false"` 并删除 dataExtractionRules/fullBackupContent 引用与
+   res/xml 下两个备份规则文件，课堂文本不进 Google 云备份/换机迁移，卸载即清。
+8. **gradlew 可执行位**：`git update-index --chmod=+x`，仓库内 mode 100755；workflow 移除两处 chmod step。
+
+### 10.2 CI/工程收尾
+- workflow 顶层 `permissions: contents: read`（最小），仅 release job 单独 `contents: write`；
+  verify job 新增 `:app:lintDebug`；`app/build.gradle.kts` 加 `lint{abortOnError=false;checkReleaseBuilds=false}`
+  （只产报告不阻断）。Room `fallbackToDestructiveMigration` 旁加"正式版前必须换显式 Migration"的 TODO。
+  README 统一架构措辞（release 三架构 / debug arm64+x86_64）并补 allowBackup=false 隐私说明。
+- **教训**：XML 标签的属性列表之间不能插 `<!-- -->` 注释（更不能用 `//`），注释只能放在标签外；
+  改 XML 后用 `xml.dom.minidom.parse` 本地校验良构再提交（本轮因此失败过一次 CI）。
+
+### 10.3 模型整包 SHA-256（已写入 AsrModels.archiveSha256，下载后强制校验）
+- small-bilingual-zh-en-int8.zip（52,430,525 B）：`39aee1c1590fb60d73b91ebd0ca5ed9585c6275e260554d7d12b1b8e73badbf3`
+- zh-14m-int8.zip（26,681,115 B）：`0ae36ec8aca458f4d8490f56d4d4cd9e973785da29560817772855d66750055f`
+
+### 10.4 仍未做（低优先/待决策）
+- CI 的 Node.js 20 / setup-java v4 deprecation 仅为警告不阻断；想消除可升 actions/checkout@v5、
+  actions/setup-java@v5（参数兼容），upload-artifact/setup-gradle 待其发布 node24 版本，改动后需再跑一次 CI。
+- release 仍 debug 签名（正式上架需自有 keystore + CI secrets）。
+- 跨句自问自答的"延迟确认/撤销"缓冲仍未做（宜在能本地/真机验证时改 RecordService 时序）。
+- 本轮修复 + 小模型都在 main，尚未发新版 Release；是否打 v0.2.0 由用户拍板（打 v* tag 即自动出三架构包）。
