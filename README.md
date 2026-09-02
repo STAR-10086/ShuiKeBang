@@ -40,7 +40,7 @@
 
 - **真流式离线识别**：基于 sherpa-onnx Streaming Zipformer（INT8 量化），边说边出字，**全程不需要联网**，音频不出设备、不落地保存。
 - **中英双语**：默认 small 双语模型（英语课可用），另提供 25MB 纯中文省流模型。
-- **两级提问检测**：纯规则、无大模型，识别「点名 / 让同学回答」的 L1 预警与「疑问句」的 L2 确认，支持四档灵敏度。
+- **两级提问检测**：轻量规则 + 约 35KB 字级极小分类器（非大模型、纯本地、零网络），识别「点名 / 让同学回答」的 L1 预警与「疑问句」的 L2 确认，专门抑制老师自问自答造成的误报，支持四档灵敏度。
 - **即时提醒与回溯**：命中 L2 时两段式震动 + 录制页高亮 + 提问列表沉淀，随时复制问题。
 - **本地课堂档案**：Room 存储每节课的完整转录与提问，按时间浏览、重命名、删除、复制。
 - **模型动态下发**：APK 本体不含模型，首次使用下载到应用私有目录，卸载即清除。
@@ -67,7 +67,7 @@
 ```mermaid
 flowchart LR
     MIC[AudioCapture<br/>16k 单声道, 仅内存] --> ENG[SherpaStreamEngine<br/>真流式解码]
-    ENG -->|partial/final 文本| DET[QuestionDetector<br/>轻量规则两级判定]
+    ENG -->|partial/final 文本| DET[QuestionDetector<br/>规则 + 35KB 极小模型仲裁]
     DET -->|普通讲课行| DB[(Room<br/>转录表)]
     DET -->|L1/L2 提问| DB2[(Room<br/>提问表)]
     DET -->|L2 命中| ALERT[震动 + 状态岛 + UI 高亮]
@@ -92,8 +92,9 @@ app/src/main/java/com/star/shuikebang/
 │  ├─ AsrModels.kt                       #   内置模型清单 / 候选下载源
 │  ├─ DownloadSource.kt                  #   下载源选项定义
 │  └─ ModelManager.kt                    #   下载、断点续传、解压、sha256
-├─ nlp/                                  # 提问检测（纯规则，无模型）
+├─ nlp/                                  # 提问检测：规则 + 极小模型仲裁
 │  ├─ TextNorm.kt / QuestionRules.kt / QuestionDetector.kt
+│  └─ QuestionMlClassifier.kt            #   35KB 字级 MLP，纯 Kotlin 前向（权重在 assets/qclassifier）
 ├─ data/
 │  ├─ db/                                #   Room：会话 / 转录 / 提问三表
 │  └─ prefs/SettingsRepository.kt        #   DataStore 设置
@@ -124,11 +125,11 @@ app/src/main/java/com/star/shuikebang/
 sdk.dir=D\:\\apps\\AndroidSDK
 ```
 
-### 2. 依赖镜像与代理（国内网络）
+### 2. 依赖源与代理
 
-- Maven 依赖已在 `settings.gradle.kts` 配置阿里云 google/central 镜像 + JitPack；
-- Gradle distribution 走腾讯云镜像（`gradle/wrapper/gradle-wrapper.properties`）；
-- 如需本地代理，见 `gradle.properties` 末尾的 `systemProp.*.proxyHost=127.0.0.1` / `proxyPort=7897`，不用可删除；`nonProxyHosts` 已放行国内镜像。
+- Maven 依赖**统一使用官方源**（gradlePluginPortal / google / mavenCentral / JitPack），见 `settings.gradle.kts`；GitHub Actions 在海外直连即可，**不要加回阿里云镜像**（海外访问会 502 导致 CI 失败）。
+- Gradle wrapper distribution 走腾讯云镜像（`gradle/wrapper/gradle-wrapper.properties`），仅加速 wrapper 本身下载。
+- 国内本地构建让 Gradle 走本地代理：在**用户全局** `~/.gradle/gradle.properties`（不进仓库）写 `systemProp.https.proxyHost=127.0.0.1`、`systemProp.https.proxyPort=7897`（http 同理）。代理节点必须能访问 `dl.google.com`（AGP / AndroidX 只在该域名）。仓库内 `gradle.properties` 刻意不含代理，以免污染云端 CI。
 
 ### 3. 构建
 
@@ -136,7 +137,10 @@ sdk.dir=D\:\\apps\\AndroidSDK
 # Debug：arm64-v8a + x86_64（可跑模拟器）
 .\gradlew.bat :app:assembleDebug
 
-# Release：仅 arm64-v8a，R8 + 资源压缩 + so 压缩（当前用 debug 签名，可直接装机）
+# Release 三架构（arm64-v8a / armeabi-v7a / universal），加 -PsplitAbi
+.\gradlew.bat :app:assembleRelease -PsplitAbi
+
+# 只打单一 arm64-v8a
 .\gradlew.bat :app:assembleRelease
 
 # 单元测试
@@ -150,7 +154,7 @@ sdk.dir=D\:\\apps\\AndroidSDK
 | release | `app/build/outputs/apk/release/app-release.apk`（约 12MB） | 真机安装 |
 | debug | `app/build/outputs/apk/debug/app-debug.apk` | 模拟器（含 x86_64） |
 
-> Release 默认只打 `arm64-v8a`（覆盖 2019 年后绝大多数真机）；需要老架构在 `app/build.gradle.kts` 的 `abiFilters` 加回 `armeabi-v7a`。正式上架前需替换为自有 keystore。
+> 加 `-PsplitAbi` 一次产出 `app-arm64-v8a-release.apk`（约 12MB）、`app-armeabi-v7a-release.apk`（约 11MB）、`app-universal-release.apk`（约 22MB）；不加开关只打 arm64-v8a。当前用 debug 签名，正式上架前需替换为自有 keystore。**推送 `v*` tag 时 GitHub Actions 会自动构建三架构并发布 Release**（见 `.github/workflows/android.yml`）。
 
 ## 模型动态下发
 
@@ -168,9 +172,9 @@ sdk.dir=D\:\\apps\\AndroidSDK
 - **网络实测**：GitHub Release 直连在国内会超时；`ghfast.top` / `gh-proxy.com` 公共镜像不走代理可直连，因此默认「镜像优先、官方兜底」。
 - **迁移到 Cloudflare R2 / 自建对象存储**：只改 `asr/AsrModels.kt` 中 `BuiltinModels` 的 `archiveUrl / mirrorUrls / sizeBytes`，以及 `DownloadSource.kt` 的源列表，其余代码无需改动。
 
-## 提问检测规则（可调）
+## 提问检测：规则 + 极小模型（可调）
 
-检测刻意保持「轻量规则、无大模型」，避免体积与算力膨胀。规则集中在 `nlp/QuestionRules.kt`，判定在 `nlp/QuestionDetector.kt`：
+检测保持轻量、纯本地：高置信规则直通，另用一个约 35KB 的字级极小分类器裁决歧义（不是大模型、无网络、无 native 依赖）。规则在 `nlp/QuestionRules.kt`，判定在 `nlp/QuestionDetector.kt`，模型前向在 `nlp/QuestionMlClassifier.kt`。规则层：
 
 - **强疑问结构**（`ZH_STRONG`，如「什么是 / 为什么 / 哪位 / 是什么」）：命中即较可信；
 - **次强结构**（`ZH_STRONG_SOFT`，如「如何」，保守档不判）；
@@ -187,7 +191,14 @@ sdk.dir=D\:\\apps\\AndroidSDK
 | 保守 LOW | 只认问号 / 句末「吗」/ 核心强结构 |
 | 关闭 OFF | 只转写，完全不检测、不提醒 |
 
-> 调整误报 / 漏报时，先在 `QuestionRules.kt` 增删词表，再到 `app/src/test/.../QuestionDetectorTest.kt` 补对应用例（已内置一批「讲课句不得误报」反例），跑 `testDebugUnitTest` 守护。
+> 调整误报 / 漏报时，先在 `QuestionRules.kt` 增删词表，再到 `QuestionDetectorTest.kt` 补对应用例（已内置一批「讲课句不得误报」反例），跑 `testDebugUnitTest` 守护。
+
+**极小分类器：处理规则拿不准的歧义**
+
+- 结构：字 embedding 平均(32 维) → 单隐层(32, ReLU) → sigmoid，int8 量化；`app/src/main/assets/qclassifier/` 下 `vocab.txt` + `model.txt` 合计约 35KB，随 APK 打包、离线可用；纯 Kotlin 前向，加载失败自动回退纯规则。
+- 融合：问号 / 句末「吗」/ 硬强结构 / 点名等高置信信号由规则直接定；**仅当句中出现疑问信号但规则不敢确认**（疑似自问自答、弱词旁证不足）时才跑模型，概率 ≥ 0.55 才判 L2；纯陈述句不跑模型（省算力、防误报）。
+- 重训：编辑 `research/mini_q/train_export.py` 的模板与槽位后运行，会直接覆盖导出到 `app/src/main/assets/qclassifier/`；守护测试见 `QuestionMlClassifierTest.kt`（前向数学 + 真实模型语义/融合）。
+- 边界：模型只判单句，**跨句自问自答（上一句问、下一句答）尚需独立的延迟确认/撤销缓冲机制，暂未实现**；目前仅中文走模型，英文仍纯规则。
 
 ## 状态岛四级降级
 

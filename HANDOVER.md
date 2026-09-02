@@ -4,6 +4,9 @@
 
 ## 0. 一句话现状
 
+> **【最新见 §9 第三轮进展，与前文冲突处以 §9 为准】** 第三轮已用 GitHub Actions 跑通 CI/CD，**Release v0.1.0 已发布（arm64-v8a / armeabi-v7a / universal 三个 APK）**，并接入约 35KB 字级极小提问分类器降低自问自答误报。
+
+
 **第一轮代码已推送到 main、模型 Release `asr-models-v1` 已建好（两个 zip 已上传）。** 第二轮根据用户真机/体验反馈完成 5 项改动（历史详情闪退修复、提问检测大幅降误报并支持四档灵敏度、新增设置页、模型下载源可手动选择、README 重写），本地 `compileDebugKotlin + testDebugUnitTest` 已通过、单测扩到 19 个全绿，release APK 已重新打出，**但用户要求先在本地真机自测，确认后再由下一轮执行 git 提交/推送并发 Release（见 §5）。** 模型网络实测：GitHub Release 直连国内超时，ghfast.top / gh-proxy.com 不走代理直连 200 且大小正确（ghproxy.net 已失效移除），默认「镜像优先、官方兜底」。
 
 ## 1. 本机环境（已核实，直接用）
@@ -119,3 +122,64 @@
 - 官方安卓依赖示例：`.../master/android/SherpaOnnxJavaDemo/app/build.gradle`
 - 模型来源：HF `csukuangfj/sherpa-onnx-streaming-zipformer-zh-14M-2023-02-23`、`csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20`（注意 small-2023-02-16 在 HF 无 onnx 单文件仓库，只有 ncnn；其 int8 文件已从官方 tar 提取到 dist-models）；国内镜像 hf-mirror.com 已实测不走代理可直连。
 - 厂商岛：小米 dev.mi.com HyperOS 通知文档、vivo dev.vivo.com.cn doc/894、896；GitHub peacemo/codup HyperOS3_notify.md。
+
+
+## 9. 第三轮进展（2026-09-02，CI/CD 发版 + 三架构 + 提问小模型）
+
+> 本节为当前最新状态，与 §0/§4b/§5/§6 冲突处以本节为准。
+
+### 9.1 已完成
+- **CI/CD 全绿并发版**：`.github/workflows/android.yml`，push/PR 跑 `verify`（单测+debug APK+上传 artifact），
+  打 `v*` tag 额外跑 `release`（`assembleRelease -PsplitAbi`，重命名后 softprops/action-gh-release 发 Release）。
+  **Release `v0.1.0` 已发布**：shuikebang-v0.1.0-arm64-v8a.apk(约12MB)、-armeabi-v7a.apk(约11MB)、
+  -universal.apk(约22MB)。仓库简介与 topics 已用 `gh repo edit` 设置。
+- **三架构 ABI splits**：`app/build.gradle.kts` 用 `project.hasProperty("splitAbi")` 开关；
+  `./gradlew :app:assembleRelease -PsplitAbi` 一次产出三个 APK（splits.abi + isUniversalApk，
+  并用 ndk.abiFilters 防止 AAR 自带 x86 混进 universal）。debug 非 split 时 arm64+x86_64 供模拟器。
+- **提问小模型接入（重点，替代纯关键词）**：见 9.3。
+- 规则层先加了"自问自答"抑制（QuestionRules.ZH_ANSWER_CUE + QuestionDetector.isSelfAnswered）。
+
+### 9.2 构建源 / 代理（覆盖 §6 旧描述，重要）
+- **settings.gradle.kts 现统一只用官方源**：pluginManagement = gradlePluginPortal/google/mavenCentral，
+  dependencyResolution = google/mavenCentral/jitpack；**已移除全部阿里云镜像**（阿里云公共镜像从 GHA 海外
+  runner 访问会 HTTP 502，且 Gradle 对 5xx 不保证回退，曾导致 CI 连挂）。用户明确要求本地也走官方源。
+- pluginManagement 保留 `resolutionStrategy.eachPlugin` 把 KSP 插件映射到真实构件
+  `com.google.devtools.ksp:symbol-processing-gradle-plugin:<ver>`（全新环境 KSP plugin marker 偶发解析不到，保留勿删）。
+- **代理只在用户全局 `C:\Users\STAR\.gradle\gradle.properties`**（127.0.0.1:7897，nonProxyHosts 含国内镜像）；
+  仓库内 gradle.properties **不含代理**（否则云端 CI 直接失败）。
+- git/gh 命令前需进程内 `$env:HTTPS_PROXY=$env:HTTP_PROXY='http://127.0.0.1:7897'`；remote 是 HTTPS（SSH 22 不通，勿改回）。
+  gh 已登录 STAR-10086，scopes 含 workflow（曾因缺 workflow scope 用 `gh auth refresh -s workflow` device 授权补齐）。
+
+### 9.3 提问小模型（极小、纯本地、非大模型）
+- 动机：纯关键词遇到老师"自问自答"（句中出现"什么"就报）误报；用一个几十 KB 的字级分类器裁决歧义。
+- 结构（与 `research/mini_q/train_export.py` 严格对应，纯 numpy 训练）：
+  字 embedding 平均(D=32) → 单隐层(H=32, ReLU) → 1 维 sigmoid；权重 int8 对称量化。
+- 产物随 **APK assets** 下发：`app/src/main/assets/qclassifier/vocab.txt`(约1.5KB) + `model.txt`(约33KB)，合计约35KB
+  （这是文本分类器、不是 ASR 大模型，体积可忽略，故打进 assets 保证离线可用、无需下载）。
+- 运行端 `nlp/QuestionMlClassifier.kt`：**纯 Kotlin 前向、零 native/第三方依赖**；
+  `fromAssets(context)` 读取，任何异常返回 null；`parse(vocabText, modelText)` 与 assets 读取分离以便 JVM 单测；
+  解析对 CRLF/多空白健壮（防 git autocrlf）。
+- 融合策略在 `QuestionDetector`：构造新增 `ml: QuestionMlClassifier? = null, mlThreshold=0.55f`。
+  高置信规则（问号/句末"吗"/硬强结构/点名）直通；**ML 只在"句中有疑问信号(strong/strongSoft/weak/?/吗)但规则未确认"
+  时跑**，概率≥0.55 才翻成 L2；纯陈述不跑模型（省算力+防误报）。**ml=null 时行为与纯规则完全一致**（老单测不破）。
+  RecordService.onCreate 用 fromAssets 加载并注入。
+- 效果：训练 4200、留出 900 句 acc 98.9%（零误报、少量保守漏报），手写边界集 26 句 100%。
+  单测 `QuestionMlClassifierTest`：内联小模型验证前向数学（必跑）+ 真实 assets 模型存在时验证语义与融合（assumeTrue 跳过）。
+- **局限/后续**：训练语料是模板生成，真实课堂泛化需采集真实 ASR 文本再训（改 train_export.py 重导出即可覆盖 assets）；
+  模型只管单句，**跨句自问自答（上句问、下句答）管不了，需要独立的"延迟确认/撤销"缓冲机制**；目前只做中文，英文仍纯规则。
+
+### 9.4 本地环境当前坑（需用户配合一次）
+- 当前 Clash 节点**能上 www.google.com、repo1.maven.org、plugins.gradle.org、jitpack.io（均 200），
+  但 dl.google.com 稳定 TLS 握手失败（curl http=000 / exit35）**；maven.google.com 会 301 跳到 dl.google.com 也无效。
+  AGP/androidx 只在 dl.google.com，故本地联网构建卡在下载 AGP classpath。**换一个能打开
+  https://dl.google.com 的代理节点后，联网跑一次 assembleDebug 补齐缓存即可**；CI 在海外直连 dl.google.com 正常，不受影响。
+- 之前跑过 `--refresh-dependencies` 使 AGP classpath 的解析元数据失效（jar 实体仍在
+  ~/.gradle/caches/modules-2/files-2.1，但 offline 报 No cached），所以在换节点前本地 offline 也编译不了；
+  **此期间可把代码 push 到 main，用 CI 的 verify job 代编译/代跑单测**（推 main 不触发 release，只有 v* tag 才发版）。
+
+### 9.5 下一步建议（按优先级）
+1. 用户换代理节点 → 本地 `:app:testDebugUnitTest :app:assembleDebug` 复绿；真机装 v0.1.0 验证小模型是否显著减少自问自答误报。
+2. 采集真实课堂 ASR 误报/漏报句子，迭代 train_export.py 语料并重导出 assets；必要时加跨句延迟确认机制。
+3. release 目前用 debug 签名，正式上架需自建 keystore 并在 CI 配 secrets。
+4. 小米/vivo 厂商岛 extras 字段仍需真机校准（不支持则降级 L3 通知）；目标机型/系统版本待用户提供。
+5. 公共 GitHub 镜像前缀日后失效则换前缀或迁 R2（只改 AsrModels.kt/DownloadSource.kt）。
