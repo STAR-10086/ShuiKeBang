@@ -58,4 +58,11 @@ object RecSession {
     suspend fun emitQuestion(q: QuestionEntity) {
         _questionEvents.emit(q)
     }
+
+    /** 延迟确认命中时，把先前按普通行展示的同时间戳句子原地升级（如普通行 -> 高亮问题行） */
+    fun replaceLine(ts: Long, transform: (UtteranceLine) -> UtteranceLine) {
+        _state.update { st ->
+            st.copy(lines = st.lines.map { if (it.ts == ts) transform(it) else it })
+        }
+    }
 }

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.star.shuikebang.asr.MicGainMode
 import com.star.shuikebang.nlp.DetectSensitivity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -22,6 +23,10 @@ data class AppSettings(
     val showL1Suspect: Boolean = true,
     /** 模型下载源 id，见 [com.star.shuikebang.asr.DownloadSource] */
     val downloadSourceId: String = "auto",
+    /** 麦克风增益档位 id，见 [com.star.shuikebang.asr.MicGainMode]，默认自动 */
+    val micGainId: String = MicGainMode.AUTO.id,
+    /** L2 提问二次确认：短暂延迟，若老师紧接着自答则撤销提醒，抑制自问自答误报，默认开启 */
+    val confirmQuestion: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -39,6 +44,8 @@ class SettingsRepository private constructor(context: Context) {
             overlayCapsule = p[K_OVERLAY] ?: false,
             showL1Suspect = p[K_SHOW_L1] ?: true,
             downloadSourceId = p[K_SOURCE] ?: "auto",
+            micGainId = p[K_MIC_GAIN] ?: MicGainMode.AUTO.id,
+            confirmQuestion = p[K_CONFIRM] ?: true,
         )
     }
 
@@ -49,13 +56,17 @@ class SettingsRepository private constructor(context: Context) {
     suspend fun setOverlay(v: Boolean) = ds.edit { it[K_OVERLAY] = v }
     suspend fun setShowL1(v: Boolean) = ds.edit { it[K_SHOW_L1] = v }
     suspend fun setDownloadSource(id: String) = ds.edit { it[K_SOURCE] = id }
+    suspend fun setMicGain(id: String) = ds.edit { it[K_MIC_GAIN] = id }
+    suspend fun setConfirmQuestion(v: Boolean) = ds.edit { it[K_CONFIRM] = v }
 
     companion object {
         private val K_VIBRATE = booleanPreferencesKey("vibrate_on_question")
         val K_SENSITIVITY = stringPreferencesKey("detect_sensitivity")
-        val K_OVERLAY = booleanPreferencesKey("overlay_capsule")
-        val K_SHOW_L1 = booleanPreferencesKey("show_l1_suspect")
-        val K_SOURCE = stringPreferencesKey("download_source")
+        private val K_OVERLAY = booleanPreferencesKey("overlay_capsule")
+        private val K_SHOW_L1 = booleanPreferencesKey("show_l1_suspect")
+        private val K_SOURCE = stringPreferencesKey("download_source")
+        private val K_MIC_GAIN = stringPreferencesKey("mic_gain")
+        private val K_CONFIRM = booleanPreferencesKey("confirm_question")
 
         @Volatile
         private var instance: SettingsRepository? = null

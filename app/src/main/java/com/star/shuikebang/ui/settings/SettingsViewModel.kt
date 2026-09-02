@@ -23,4 +23,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setOverlay(v: Boolean) = viewModelScope.launch { repo.setOverlay(v) }
     fun setShowL1(v: Boolean) = viewModelScope.launch { repo.setShowL1(v) }
     fun setSource(id: String) = viewModelScope.launch { repo.setDownloadSource(id) }
+    fun setMicGain(id: String) = viewModelScope.launch { repo.setMicGain(id) }
+    fun setConfirmQuestion(v: Boolean) = viewModelScope.launch { repo.setConfirmQuestion(v) }
 }

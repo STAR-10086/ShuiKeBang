@@ -9,8 +9,10 @@ import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.star.shuikebang.asr.AudioCapture
+import com.star.shuikebang.asr.AudioPreamp
 import com.star.shuikebang.asr.AsrModelSpec
 import com.star.shuikebang.asr.BuiltinModels
+import com.star.shuikebang.asr.MicGainMode
 import com.star.shuikebang.asr.ModelManager
 import com.star.shuikebang.asr.ModelPaths
 import com.star.shuikebang.asr.ModelState
@@ -20,12 +22,13 @@ import com.star.shuikebang.data.db.ClassRepository
 import com.star.shuikebang.data.prefs.AppSettings
 import com.star.shuikebang.data.prefs.SettingsRepository
 import com.star.shuikebang.data.db.QuestionEntity
-import com.star.shuikebang.data.db.TranscriptEntity
 import com.star.shuikebang.feedback.Hapticx
 import com.star.shuikebang.island.StatusIsland
 import com.star.shuikebang.nlp.DetectSensitivity
+import com.star.shuikebang.nlp.QuestionDetection
 import com.star.shuikebang.nlp.QuestionDetector
 import com.star.shuikebang.nlp.QuestionMlClassifier
+import com.star.shuikebang.nlp.SelfAnswerDetector
 import com.star.shuikebang.util.TimeFmt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +45,7 @@ class RecordService : LifecycleService() {
 
     private var engine: SherpaStreamEngine? = null
     private var capture: AudioCapture? = null
+    private var preamp: AudioPreamp? = null
     private var spec: AsrModelSpec? = null
     private var tickerJob: Job? = null
     private var startJob: Job? = null
@@ -54,6 +58,19 @@ class RecordService : LifecycleService() {
 
     // 在途入库任务：停止录音时必须全部 join，确保最后一句真正落库
     private val writeJobs = java.util.Collections.synchronizedSet(mutableSetOf<Job>())
+
+    // 断句处理统一在单并行度上下文串行执行：延迟确认门状态与入库都无需额外加锁
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val gateDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+    // 一条等待“二次确认”的 L2 提问
+    private class PendingQuestion(
+        val ts: Long,
+        val clean: String,
+        val detection: QuestionDetection,
+    )
+    private var pending: PendingQuestion? = null
+    private var confirmJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -148,7 +165,9 @@ class RecordService : LifecycleService() {
     }
 
     private fun startCapture(eng: SherpaStreamEngine) {
-        val cap = AudioCapture(onSamples = { samples, sr ->
+        val amp = AudioPreamp(MicGainMode.of(cfg.micGainId)).also { it.reset() }
+        preamp = amp
+        val cap = AudioCapture(preamp = amp, onSamples = { samples, sr ->
             eng.accept(samples, sr, object : StreamAsrCallback {
                 override fun onPartial(text: String) {
                     RecSession.update { it.copy(partial = text) }
@@ -169,60 +188,114 @@ class RecordService : LifecycleService() {
         capture = cap
     }
 
-    // ---------------- 断句定稿 ----------------
+    // ---------------- 断句定稿（串行） ----------------
 
     private fun handleFinal(text: String) {
         val clean = text.trim()
         if (clean.isBlank()) return
         val now = System.currentTimeMillis()
         RecSession.update { it.copy(partial = "") }
-
         val detection = detector.detect(clean)
-        val sid = RecSession.state.value.sessionId ?: return
 
-        val writeJob = lifecycleScope.launch(Dispatchers.IO) {
-            // 用户关闭 L1 预警时，一级疑似按普通讲课行处理，不进提问列表
-            if (detection == null || (detection.level == 1 && !cfg.showL1Suspect)) {
-                repo.addTranscript(sid, now, clean)
-                RecSession.update {
-                    it.copy(lines = it.lines + UtteranceLine(now, clean, 0))
+        // 全部断句处理进入单并行度队列，保证“待定—撤销/确认”严格按说话顺序发生
+        val job = lifecycleScope.launch(gateDispatcher) {
+            val sid = RecSession.state.value.sessionId ?: return@launch
+
+            // 1) 上一条 L2 正在待定：用当前句判断老师是否在自问自答
+            val pend = pending
+            if (pend != null) {
+                if (cfg.confirmQuestion && SelfAnswerDetector.isSelfAnswer(pend.clean, clean)) {
+                    revokePending(pend, sid)      // 自答 → 撤销，按普通讲课处理
+                } else {
+                    confirmPending(sid)           // 不是自答 → 上一条提前确认为提问
                 }
-                return@launch
             }
 
-            // 冷却去重
-            val isDup = clean == lastQuestionText && now - lastQuestionTs < 4000
-            val qid = repo.addQuestion(
-                QuestionEntity(
-                    sessionId = sid,
-                    ts = now,
-                    level = detection.level,
-                    hitKeyword = detection.hitKeyword,
-                    rawSentence = detection.rawSentence,
-                    coreQuestion = detection.coreQuestion,
-                )
-            )
-            repo.addTranscript(sid, now, clean, qid)
-            val question = QuestionEntity(
-                id = qid, sessionId = sid, ts = now, level = detection.level,
-                hitKeyword = detection.hitKeyword, rawSentence = detection.rawSentence,
-                coreQuestion = detection.coreQuestion,
-            )
-            RecSession.update {
-                it.copy(
-                    lines = it.lines + UtteranceLine(now, clean, detection.level, qid),
-                    questions = it.questions + question,
-                )
-            }
-            if (!isDup && detection.level == 2) {
-                lastQuestionText = clean
-                lastQuestionTs = now
-                if (cfg.vibrateOnQuestion) Hapticx.questionAlert(this@RecordService)
-                island.onQuestion(qid, detection.coreQuestion, detection.rawSentence)
-                RecSession.emitQuestion(question)
+            // 2) 当前句分流
+            when {
+                detection == null -> addPlainLine(sid, now, clean)
+                detection.level == 1 && !cfg.showL1Suspect -> addPlainLine(sid, now, clean)
+                detection.level == 2 && cfg.confirmQuestion -> armPending(sid, now, clean, detection)
+                else -> commitQuestion(sid, now, clean, detection)
             }
         }
-        trackWrite(writeJob)
+        trackWrite(job)
+    }
+
+    /** 普通讲课行：直接落库 + 上屏 */
+    private suspend fun addPlainLine(sid: Long, ts: Long, text: String) {
+        repo.addTranscript(sid, ts, text)
+        RecSession.update { it.copy(lines = it.lines + UtteranceLine(ts, text, 0)) }
+    }
+
+    /** L2 进入待定：先以普通行上屏，延迟窗口内若自答则撤销，否则升级为提问 */
+    private fun armPending(sid: Long, ts: Long, clean: String, det: QuestionDetection) {
+        RecSession.update { it.copy(lines = it.lines + UtteranceLine(ts, clean, 0)) }
+        val p = PendingQuestion(ts, clean, det)
+        pending = p
+        val job = lifecycleScope.launch(gateDispatcher) {
+            delay(CONFIRM_DELAY_MS)
+            if (pending === p) confirmPending(sid)
+        }
+        confirmJob = job
+        trackWrite(job)
+    }
+
+    /** 撤销待定提问：保持普通行，仅补落库一条普通转录 */
+    private suspend fun revokePending(p: PendingQuestion, sid: Long) {
+        if (pending !== p) return
+        confirmJob?.cancel()
+        confirmJob = null
+        pending = null
+        repo.addTranscript(sid, p.ts, p.clean)
+        // 上屏行在 armPending 时已按普通行加入，这里保持 level=0 不变
+    }
+
+    /** 确认待定/即时提问：写提问与转录、普通行升级高亮、按需震动/状态岛提醒 */
+    private suspend fun confirmPending(sid: Long) {
+        val p = pending ?: return
+        confirmJob = null
+        pending = null
+        commitQuestion(sid, p.ts, p.clean, p.detection)
+    }
+
+    private suspend fun commitQuestion(
+        sid: Long, ts: Long, clean: String, detection: QuestionDetection,
+    ) {
+        val isDup = clean == lastQuestionText && ts - lastQuestionTs < 4000
+        val qid = repo.addQuestion(
+            QuestionEntity(
+                sessionId = sid,
+                ts = ts,
+                level = detection.level,
+                hitKeyword = detection.hitKeyword,
+                rawSentence = detection.rawSentence,
+                coreQuestion = detection.coreQuestion,
+            )
+        )
+        repo.addTranscript(sid, ts, clean, qid)
+        val question = QuestionEntity(
+            id = qid, sessionId = sid, ts = ts, level = detection.level,
+            hitKeyword = detection.hitKeyword, rawSentence = detection.rawSentence,
+            coreQuestion = detection.coreQuestion,
+        )
+        // 待定句此前是普通行，这里原地升级为高亮问题行；即时句则新增高亮行
+        val existed = RecSession.state.value.lines.any { it.ts == ts }
+        if (existed) {
+            RecSession.replaceLine(ts) { it.copy(level = detection.level, questionId = qid) }
+        } else {
+            RecSession.update {
+                it.copy(lines = it.lines + UtteranceLine(ts, clean, detection.level, qid))
+            }
+        }
+        RecSession.update { it.copy(questions = it.questions + question) }
+        if (!isDup && detection.level == 2) {
+            lastQuestionText = clean
+            lastQuestionTs = ts
+            if (cfg.vibrateOnQuestion) Hapticx.questionAlert(this@RecordService)
+            island.onQuestion(qid, detection.coreQuestion, detection.rawSentence)
+            RecSession.emitQuestion(question)
+        }
     }
 
     /** 登记入库协程，停止录音时 joinAll 等待其真正完成 */
@@ -256,12 +329,17 @@ class RecordService : LifecycleService() {
                 capture?.stop()
                 capture = null
                 tickerJob?.cancel()
-                // 2) 采集已停，安全取引擎残句（handleFinal 会再登记一个入库任务）
+                // 2) 采集已停，安全取引擎残句（handleFinal 会把处理排队进 gateDispatcher）
                 val residual = engine?.flush()
                 if (!residual.isNullOrBlank()) handleFinal(residual)
-                // 3) 等待所有入库任务真正落库（替代固定 delay，避免最后一句丢失/questionCount 少算）
+                // 3) 排在残句处理之后：若仍有待定提问，录音已结束、不会再有自答，立即确认
+                val tail = lifecycleScope.launch(gateDispatcher) {
+                    if (pending != null) confirmPending(RecSession.state.value.sessionId ?: return@launch)
+                }
+                trackWrite(tail)
+                // 4) 等待所有入库/确认任务真正落库（替代固定 delay，避免最后一句丢失/questionCount 少算）
                 synchronized(writeJobs) { writeJobs.toList() }.joinAll()
-                // 4) 全部写完再结束会话；引擎在 finally 的 stopSelfClean 中释放
+                // 5) 全部写完再结束会话；引擎在 finally 的 stopSelfClean 中释放
                 RecSession.state.value.sessionId?.let {
                     repo.finishSession(it, System.currentTimeMillis())
                 }
@@ -277,7 +355,9 @@ class RecordService : LifecycleService() {
     private fun stopSelfClean() {
         tickerJob?.cancel()
         startJob?.cancel(); startJob = null
+        confirmJob?.cancel(); confirmJob = null; pending = null
         capture?.stop(); capture = null
+        preamp = null
         engine?.release(); engine = null
         island.onStop()
         RecSession.update {
@@ -300,6 +380,9 @@ class RecordService : LifecycleService() {
         private const val ACTION_START = "com.star.shuikebang.START"
         private const val ACTION_STOP = "com.star.shuikebang.STOP"
         private const val EXTRA_MODEL_ID = "model_id"
+
+        /** L2 提问二次确认窗口：真实提问老师会停顿等学生，延迟 2.2s 再提醒不影响体验，却能拦住自问自答 */
+        private const val CONFIRM_DELAY_MS = 2200L
 
         fun start(context: Context, modelId: String = BuiltinModels.RECOMMENDED_ID) {
             val intent = Intent(context, RecordService::class.java).apply {

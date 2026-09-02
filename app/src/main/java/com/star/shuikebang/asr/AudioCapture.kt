@@ -15,6 +15,8 @@ class AudioCapture(
     private val sampleRate: Int = 16_000,
     /** 每帧毫秒数，sherpa 流式建议 100ms */
     private val frameMs: Int = 100,
+    /** 可选的麦克风前级增益（小声放大），作用在转 float 之后、回调之前 */
+    private val preamp: AudioPreamp? = null,
     private val onSamples: (FloatArray, Int) -> Unit,
     private val onError: (Throwable) -> Unit = {},
 ) {
@@ -67,6 +69,8 @@ class AudioCapture(
             val n = rec.read(shortBuf, 0, frameShorts)
             if (n > 0) {
                 for (i in 0 until n) floatBuf[i] = shortBuf[i].toFloat() / 32768f
+                // 送入识别前做增益（自动/固定档），老师声音偏小时提升识别率
+                preamp?.process(floatBuf, n)
                 val out = if (n == frameShorts) floatBuf else floatBuf.copyOf(n)
                 onSamples(out, sampleRate)
             } else if (n == AudioRecord.ERROR_INVALID_OPERATION || n == AudioRecord.ERROR_BAD_VALUE) {

@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.star.shuikebang.asr.DownloadSource
+import com.star.shuikebang.asr.MicGainMode
 import com.star.shuikebang.nlp.DetectSensitivity
 import com.star.shuikebang.ui.theme.Brand
 import com.star.shuikebang.ui.theme.CardWhite
@@ -98,6 +99,13 @@ fun SettingsScreen(
                     checked = s.showL1Suspect,
                     onCheckedChange = vm::setShowL1,
                 )
+                CellDivider()
+                SwitchRow(
+                    title = "提问二次确认",
+                    subtitle = "短暂延迟再提醒；老师紧接着自答时自动撤销，抑制自问自答误报",
+                    checked = s.confirmQuestion,
+                    onCheckedChange = vm::setConfirmQuestion,
+                )
             }
 
             // ---------- 提醒方式 ----------
@@ -126,6 +134,17 @@ fun SettingsScreen(
                         }
                     },
                 )
+            }
+
+            // ---------- 录音增益 ----------
+            SectionTitle("录音增益")
+            GroupCard {
+                MicGainMode.entries.forEachIndexed { i, g ->
+                    SensitivityOption(g.label, g.hint, s.micGainId == g.id) {
+                        vm.setMicGain(g.id)
+                    }
+                    if (i != MicGainMode.entries.lastIndex) CellDivider()
+                }
             }
 
             // ---------- 模型下载源 ----------

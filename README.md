@@ -40,8 +40,9 @@
 
 - **真流式离线识别**：基于 sherpa-onnx Streaming Zipformer（INT8 量化），边说边出字，**全程不需要联网**，音频不出设备、不落地保存。
 - **中英双语**：默认 small 双语模型（英语课可用），另提供 25MB 纯中文省流模型。
-- **两级提问检测**：轻量规则 + 约 35KB 字级极小分类器（非大模型、纯本地、零网络），识别「点名 / 让同学回答」的 L1 预警与「疑问句」的 L2 确认，专门抑制老师自问自答造成的误报，支持四档灵敏度。
+- **两级提问检测**：轻量规则 + 约 35KB 字级极小分类器（非大模型、纯本地、零网络），识别「点名 / 让同学回答」的 L1 预警与「疑问句」的 L2 确认，支持四档灵敏度；L2 命中后还会延迟约 2.2s 做**跨句二次确认**，若识别到老师紧接着自答则自动撤销提醒（可在设置关闭）。
 - **即时提醒与回溯**：命中 L2 时两段式震动 + 录制页高亮 + 提问列表沉淀，随时复制问题。
+- **麦克风增益**：老师声音偏小时在端侧放大 PCM——自动 AGC（默认，带噪声门与上限、软限幅防爆音）或 2/3/5 倍固定档，提升小声识别率；音频仍只在内存、不落盘。
 - **本地课堂档案**：Room 存储每节课的完整转录与提问，按时间浏览、重命名、删除、复制。
 - **模型动态下发**：APK 本体不含模型，首次使用下载到应用私有目录，卸载即清除。
 - **多下载源可选**：自动 / ghfast / gh-proxy / GitHub 官方，失败自动回退（国内直连友好）。
@@ -130,6 +131,7 @@ sdk.dir=D\:\\apps\\AndroidSDK
 - Maven 依赖**统一使用官方源**（gradlePluginPortal / google / mavenCentral / JitPack），见 `settings.gradle.kts`；GitHub Actions 在海外直连即可，**不要加回阿里云镜像**（海外访问会 502 导致 CI 失败）。
 - Gradle wrapper distribution 走腾讯云镜像（`gradle/wrapper/gradle-wrapper.properties`），仅加速 wrapper 本身下载。
 - 国内本地构建让 Gradle 走本地代理：在**用户全局** `~/.gradle/gradle.properties`（不进仓库）写 `systemProp.https.proxyHost=127.0.0.1`、`systemProp.https.proxyPort=7897`（http 同理）。代理节点必须能访问 `dl.google.com`（AGP / AndroidX 只在该域名）。仓库内 `gradle.properties` 刻意不含代理，以免污染云端 CI。
+- 不想依赖代理节点时，可在**用户全局** `~/.gradle/init.d/` 放 init 脚本，把插件/依赖仓库重定向到阿里云镜像（google/central/public/gradle-plugin）+ JitPack；仓库内 `settings.gradle.kts` 始终保持官方源，CI 不受影响（HANDOVER §11 附可用脚本）。
 
 ### 3. 构建
 
@@ -218,6 +220,8 @@ sdk.dir=D\:\\apps\\AndroidSDK
 - 检测到提问时是否震动
 - 是否启用悬浮状态胶囊（开启时引导授予悬浮窗权限）
 - 模型下载源（自动 / ghfast / gh-proxy / GitHub 官方）
+- 麦克风增益（自动 / 关闭 / 2 倍 / 3 倍 / 5 倍）
+- 提问二次确认开关（延迟确认、撤销自问自答）
 
 ## 测试
 
@@ -225,7 +229,7 @@ sdk.dir=D\:\\apps\\AndroidSDK
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-当前单测聚焦最易出错的提问检测：正向疑问句、点名 L1、核心问题剥除、**讲课陈述反例（不得误报）**、弱词旁证、四档灵敏度差异、中英文本归一。
+当前单测聚焦最易出错的提问检测：正向疑问句、点名 L1、核心问题剥除、**讲课陈述反例（不得误报）**、弱词旁证、四档灵敏度差异、中英文本归一；另含 `AudioPreampTest`（增益/AGC/软限幅边界）、`SelfAnswerDetectorTest`（跨句自问自答判定）、`ArchiveSafetyTest`（解压路径穿越防护）。
 
 ## 真机自测清单
 

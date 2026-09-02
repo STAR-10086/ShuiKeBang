@@ -231,3 +231,54 @@
 - release 仍 debug 签名（正式上架需自有 keystore + CI secrets）。
 - 跨句自问自答的"延迟确认/撤销"缓冲仍未做（宜在能本地/真机验证时改 RecordService 时序）。
 - 本轮修复 + 小模型都在 main，尚未发新版 Release；是否打 v0.2.0 由用户拍板（打 v* tag 即自动出三架构包）。
+
+
+---
+
+## 11. 第五轮：本地镜像构建 + 麦克风增益 + 跨句自问自答延迟确认
+
+### 11.1 本地走镜像、远端走官方（关键，解决本机无法编译）
+- 背景：当前 Clash 节点连不上 `dl.google.com`，而 AGP/AndroidX 只在该域名，本地官方源+代理编译失败。
+- 方案：在**用户全局** `C:\Users\STAR\.gradle\init.d\local-mirrors.gradle`（不进任何仓库、CI 读不到）
+  用 `settingsEvaluated` 把 settings 层的 pluginManagement / dependencyResolutionManagement 仓库列表
+  `clear()` 后换成阿里云镜像（gradle-plugin / google / public / central）+ JitPack；**不新增 project 级仓库**，
+  因此不触发 `FAIL_ON_PROJECT_REPOS`。仓库 `settings.gradle.kts` 保持纯官方源不变。
+- 全局 `~/.gradle/gradle.properties` 的 7897 代理保留，且 `nonProxyHosts` 已含 `maven.aliyun.com`（镜像直连、JitPack 走代理）。
+- 注意 init 脚本是 **Groovy（.gradle）**，变量用 `def` 不是 `val`（踩过一次编译错）。
+- 结果：本地 `:app:testDebugUnitTest / :app:assembleDebug / :app:lintDebug` 全部成功，lint 0 error；
+  debug APK 约 44MB（含全 ABI 且未裁剪，正常，release split 后 arm 包约 11–12MB）。
+
+### 11.2 麦克风增益（老师声音小识别不到）
+- 新文件 `asr/AudioPreamp.kt`：枚举 `MicGainMode`（AUTO 默认 / OFF / X2 / X3 / X5）+ 纯 Kotlin 前级。
+  - 固定档：样本×倍数后 `tanh` 软限幅（有界[-1,1]、不爆音）；
+  - AUTO 轻量 AGC：逐帧 RMS → 包络 EMA（上升 0.55/下降 0.12）→ 目标 RMS 0.09、噪声门 0.005（静音不抬底噪）、
+    增益上限 4.5、增益自身平滑 0.18 防抽吸。
+- 接入：`AudioCapture` 构造新增可空 `preamp`，在 short→float 之后、回调之前 `preamp.process(buf,n)`；
+  `RecordService.startCapture` 按 `cfg.micGainId` 创建（录音开始时生效，与灵敏度一致）。
+- 设置：DataStore `mic_gain`，设置页新增“录音增益”分组；单测 `AudioPreampTest`（直通/固定放大/不削波/小声抬升/静音不抬/有界/枚举兜底）。
+- 音频源仍用 `VOICE_RECOGNITION`（系统降噪、不做系统 AGC，增益由我们自己掌控，避免双重 AGC）。
+
+### 11.3 跨句自问自答延迟确认门（核心降误报）
+- 旧逻辑只拦“同一句内”自答（QuestionDetector.isSelfAnswered）。真实场景是断成两句：
+  “什么是递归？”(判 L2 立即提醒) → 1~2s 后“递归就是函数调用自身”(老师自答)。
+- 新文件 `nlp/SelfAnswerDetector.kt`（纯 Kotlin、单测 `SelfAnswerDetectorTest`）：
+  - 后续句又含疑问结构/问号/“吗呢”/点名短语 → 不是自答；
+  - 强解答引导（答案是/正确答案/结果是/应该选…）命中句首即判自答；
+  - 弱引导（就是/指的是/这是…复用 ZH_ANSWER_CUE）需与问题**主题 bigram 覆盖率 ≥ 0.34**（去疑问词/停用词后）；
+  - 英文：the answer is 为强，it is/this is 等需与问题实义词重合；刻意保守，宁可保留提醒也不漏真提问。
+- `RecordService` 重构（配合第四轮的串行化）：
+  - 新增 `gateDispatcher = Dispatchers.IO.limitedParallelism(1)`（需 `@OptIn(ExperimentalCoroutinesApi)`），
+    所有断句处理排队执行，pending 状态无需加锁；
+  - L2 且开关开启时 `armPending`：先以**普通行**上屏、不震动/不进提问列表/不写 question 表，
+    启动 2.2s `confirmJob`；期间来下一句：判为自答则 `revokePending`（普通转录落库、行保持普通），
+    否则提前 `confirmPending`；到期也确认；停止录音时残句后排队把残留 pending 立即确认（宁报勿漏）；
+  - 确认时 `commitQuestion`：写 question/transcript、`RecSession.replaceLine(ts)` 把普通行升级，
+    RecordScreen 按 `line.questionId` 在 `questionMap` 命中即从 TranscriptRow 重组成 QuestionCard，
+    并经 questionEvents 自动滚动定位。
+- 设置：DataStore `confirm_question`（默认 true），设置页“提问检测”组内开关“提问二次确认”。
+- 单测覆盖判定器；Service 时序依赖 Android，靠本地 assemble/lint + 代码审查，**仍需真机验证延迟体验与撤销准确率**。
+
+### 11.4 待办 / 真机验证
+- 真机重点：①AUTO 增益在不同距离/教室的实际识别率与是否抬底噪；②2.2s 延迟震动是否自然、自问自答撤销是否准确，
+  不准就调 `SelfAnswerDetector` 的 cue 词表 / `RELATED_THRESHOLD` / `CONFIRM_DELAY_MS`。
+- 本轮未发版；与第四轮加固一起积累在 main，验证 OK 后可打 v0.2.0（三架构）。
