@@ -23,9 +23,9 @@
 
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
+    <!-- 隐私优先：课堂文本不进入 Google 云备份/换机迁移，卸载即彻底清除 -->
     <application
         android:name=".ShuiKeApp"
-        // 隐私优先：课堂文本不进入 Google 云备份/换机迁移，卸载即彻底清除
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
