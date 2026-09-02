@@ -25,7 +25,13 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "shuikebang.db", // 只存文本与时间戳，不存音频
-                ).fallbackToDestructiveMigration().build().also { instance = it }
+                )
+                    // TODO(正式版前)：当前 version=1 尚无历史版本，暂用破坏性迁移兜底；
+                    // 之后每次改表都必须新增显式 Migration，并在升 version 时移除对该兜底的依赖，
+                    // 否则忘记写 Migration 会直接清空用户全部课堂记录。
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    .also { instance = it }
             }
     }
 }

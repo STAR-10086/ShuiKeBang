@@ -7,11 +7,12 @@ on:
   pull_request:
     branches: [main]
 
+# 默认最小权限：普通构建/PR 只读；只有 release job 单独提升为可写
 permissions:
-  contents: write   # tag 构建时创建/上传 Release 需要
+  contents: read
 
 jobs:
-  # 普通提交 / PR：编译 + 单元测试门禁
+  # 普通提交 / PR：编译 + 单元测试 + lint 门禁
   verify:
     runs-on: ubuntu-latest
     steps:
@@ -27,9 +28,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
       - name: Check repository reachability
         run: |
           echo "plugin-portal:"; curl -s -o /dev/null -w "%{http_code}\n" --max-time 15 https://plugins.gradle.org/m2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.0.20-1.0.25/com.google.devtools.ksp.gradle.plugin-2.0.20-1.0.25.pom
@@ -38,6 +36,9 @@ jobs:
 
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Lint (report only)
+        run: ./gradlew :app:lintDebug --no-daemon --stacktrace
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
@@ -54,6 +55,8 @@ jobs:
     needs: verify
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 仅发版 job 需要创建/上传 Release
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,9 +69,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
 
       - name: Build split release APKs (arm64-v8a / armeabi-v7a / universal)
         run: ./gradlew :app:assembleRelease -PsplitAbi --no-daemon --stacktrace
@@ -92,7 +92,7 @@ jobs:
             app/build/outputs/apk/release/shuikebang-*-armeabi-v7a.apk
             app/build/outputs/apk/release/shuikebang-*-universal.apk
           body: |
-            课堂提问助手 Android 首个可用版本。麦克风实时收音 → 本地离线流式语音识别 → 轻量规则检测老师提问 → 震动/高亮/问题回溯，全程不保存录音、不上传音频。
+            课堂提问助手 Android 首个可用版本。麦克风实时收音 → 本地离线流式语音识别 → 规则+极小模型检测老师提问 → 震动/高亮/问题回溯，全程不保存录音、不上传音频。
 
             ### 下载说明（按手机架构选择）
             - **arm64-v8a**：2019 年后绝大多数手机，体积最小，优先选它。

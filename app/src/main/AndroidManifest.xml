@@ -25,9 +25,8 @@
 
     <application
         android:name=".ShuiKeApp"
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
+        // 隐私优先：课堂文本不进入 Google 云备份/换机迁移，卸载即彻底清除
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"

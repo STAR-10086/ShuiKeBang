@@ -30,6 +30,7 @@ import com.star.shuikebang.util.TimeFmt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 
 class RecordService : LifecycleService() {
@@ -50,6 +51,9 @@ class RecordService : LifecycleService() {
     // 提问去重冷却：同一句 4 秒内不重复提醒
     private var lastQuestionText: String = ""
     private var lastQuestionTs: Long = 0L
+
+    // 在途入库任务：停止录音时必须全部 join，确保最后一句真正落库
+    private val writeJobs = java.util.Collections.synchronizedSet(mutableSetOf<Job>())
 
     override fun onCreate() {
         super.onCreate()
@@ -176,7 +180,7 @@ class RecordService : LifecycleService() {
         val detection = detector.detect(clean)
         val sid = RecSession.state.value.sessionId ?: return
 
-        lifecycleScope.launch(Dispatchers.IO) {
+        val writeJob = lifecycleScope.launch(Dispatchers.IO) {
             // 用户关闭 L1 预警时，一级疑似按普通讲课行处理，不进提问列表
             if (detection == null || (detection.level == 1 && !cfg.showL1Suspect)) {
                 repo.addTranscript(sid, now, clean)
@@ -218,6 +222,13 @@ class RecordService : LifecycleService() {
                 RecSession.emitQuestion(question)
             }
         }
+        trackWrite(writeJob)
+    }
+
+    /** 登记入库协程，停止录音时 joinAll 等待其真正完成 */
+    private fun trackWrite(job: Job) {
+        synchronized(writeJobs) { writeJobs.add(job) }
+        job.invokeOnCompletion { synchronized(writeJobs) { writeJobs.remove(job) } }
     }
 
     // ---------------- 计时 ----------------
@@ -239,13 +250,27 @@ class RecordService : LifecycleService() {
 
     private fun stopRecording() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val residual = engine?.flush()
-            if (!residual.isNullOrBlank()) handleFinal(residual)
-            delay(150) // 等最后的入库完成
-            RecSession.state.value.sessionId?.let {
-                repo.finishSession(it, System.currentTimeMillis())
+            try {
+                // 1) 先停麦克风采集并等采集线程退出（AudioCapture.stop 内部 join），
+                //    此后不再有 onSamples/accept/onFinal，避免与 flush 并发操作同一原生 OnlineStream
+                capture?.stop()
+                capture = null
+                tickerJob?.cancel()
+                // 2) 采集已停，安全取引擎残句（handleFinal 会再登记一个入库任务）
+                val residual = engine?.flush()
+                if (!residual.isNullOrBlank()) handleFinal(residual)
+                // 3) 等待所有入库任务真正落库（替代固定 delay，避免最后一句丢失/questionCount 少算）
+                synchronized(writeJobs) { writeJobs.toList() }.joinAll()
+                // 4) 全部写完再结束会话；引擎在 finally 的 stopSelfClean 中释放
+                RecSession.state.value.sessionId?.let {
+                    repo.finishSession(it, System.currentTimeMillis())
+                }
+            } catch (t: Throwable) {
+                if (t is kotlinx.coroutines.CancellationException) throw t
+                Log.e(TAG, "stop failed", t)
+            } finally {
+                stopSelfClean()
             }
-            stopSelfClean()
         }
     }
 

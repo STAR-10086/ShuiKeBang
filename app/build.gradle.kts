@@ -80,6 +80,12 @@ android {
         }
     }
 
+    lint {
+        // 产出报告但不因存量样式类问题阻断发版；正确性由编译与单测守护
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }

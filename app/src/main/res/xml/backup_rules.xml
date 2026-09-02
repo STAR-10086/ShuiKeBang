@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 仅文本数据，模型文件不备份（体积大、可重新下载） -->
-<full-backup-content>
-    <include domain="database" path="." />
-    <include domain="sharedpref" path="." />
-    <include domain="file" path="." />
-    <exclude domain="file" path="models/" />
-</full-backup-content>

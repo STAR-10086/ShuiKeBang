@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /** 实时转录列表中的一行；level: 0 普通 / 1 可能被提问 / 2 确认问题 */
 data class UtteranceLine(
@@ -33,6 +34,9 @@ data class RecUiState(
 
 /**
  * 录音中的全局可观察状态（Service 与 Compose UI 共享的单一事实源）。
+ *
+ * 采集线程 / 计时协程 / 入库协程会并发更新状态，因此必须使用 [MutableStateFlow.update]
+ * 做 CAS 式原子「读取—修改—写入」，避免后写者用旧快照覆盖前写者（例如计时覆盖新转录行）。
  */
 object RecSession {
 
@@ -44,11 +48,11 @@ object RecSession {
     val questionEvents: SharedFlow<QuestionEntity> = _questionEvents.asSharedFlow()
 
     fun update(block: (RecUiState) -> RecUiState) {
-        _state.value = block(_state.value)
+        _state.update(block)
     }
 
     fun reset() {
-        _state.value = RecUiState()
+        _state.update { RecUiState() }
     }
 
     suspend fun emitQuestion(q: QuestionEntity) {

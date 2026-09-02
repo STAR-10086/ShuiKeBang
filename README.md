@@ -244,14 +244,14 @@ sdk.dir=D\:\\apps\\AndroidSDK
 - ❌ 不保存原始录音（只存识别后的文字）
 - ❌ 不导入外部音频文件转写（仅麦克风实时流）
 - ❌ 无 AI 总结 / 问答 / 思维导图（「问 AI」按钮仅调起系统分享面板 ACTION_SEND）
-- ❌ 无云同步、无账号登录（除模型下载外无任何网络请求）
+- ❌ 无云同步、无账号登录（除模型下载外无任何网络请求）；`android:allowBackup=false`，课堂文本不进入 Google 系统云备份 / 换机迁移，卸载即彻底清除
 - ❌ 无广告、无社区、无分享 Feed
 
 ## 已知限制与后续
 
 - 小米超级岛 / vivo 原子岛的通知 extras 按公开文档实现，**尚待目标真机校准**（建议 HyperOS 小米 14/15、OriginOS 4/5 vivo 机型）；不支持时自动降级 L3 通知，功能不受影响。
 - Release 当前复用 debug 签名，正式上架需配置自有 keystore。
-- 仅 arm64-v8a；老架构按需放开 ABI。
+- Release 提供 arm64-v8a / armeabi-v7a / universal 三架构包（CI 加 `-PsplitAbi` 产出）；debug 默认 arm64-v8a + x86_64 以便模拟器调试。
 - 后续可选项：watchOS 对应能力在 Android 为手表通知（暂未做）、平板横竖屏自适应。
 
 ## 交接文档
