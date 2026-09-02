@@ -27,6 +27,17 @@ data class AppSettings(
     val micGainId: String = MicGainMode.AUTO.id,
     /** L2 提问二次确认：短暂延迟，若老师紧接着自答则撤销提醒，抑制自问自答误报，默认开启 */
     val confirmQuestion: Boolean = true,
+
+    // —— AI 解答（用户自带端点与 Key，App 不内置任何 API/Key）——
+    /** OpenAI 兼容端点 base url，填到 /v1，例如 https://api.openai.com/v1；留空则 AI 解答不可用 */
+    val aiBaseUrl: String = "",
+    /** 用户自填 API Key，仅存本机 DataStore */
+    val aiApiKey: String = "",
+    /** 模型名，例如 gpt-4o-mini / deepseek-chat / qwen-plus */
+    val aiModel: String = "gpt-4o-mini",
+
+    /** 是否已向用户引导过悬浮窗权限（避免每次开始录音都弹） */
+    val overlayGuideShown: Boolean = false,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -46,6 +57,10 @@ class SettingsRepository private constructor(context: Context) {
             downloadSourceId = p[K_SOURCE] ?: "auto",
             micGainId = p[K_MIC_GAIN] ?: MicGainMode.AUTO.id,
             confirmQuestion = p[K_CONFIRM] ?: true,
+            aiBaseUrl = p[K_AI_BASE_URL] ?: "",
+            aiApiKey = p[K_AI_API_KEY] ?: "",
+            aiModel = p[K_AI_MODEL] ?: "gpt-4o-mini",
+            overlayGuideShown = p[K_OVERLAY_GUIDE] ?: false,
         )
     }
 
@@ -58,6 +73,10 @@ class SettingsRepository private constructor(context: Context) {
     suspend fun setDownloadSource(id: String) = ds.edit { it[K_SOURCE] = id }
     suspend fun setMicGain(id: String) = ds.edit { it[K_MIC_GAIN] = id }
     suspend fun setConfirmQuestion(v: Boolean) = ds.edit { it[K_CONFIRM] = v }
+    suspend fun setAiBaseUrl(v: String) = ds.edit { it[K_AI_BASE_URL] = v.trim() }
+    suspend fun setAiApiKey(v: String) = ds.edit { it[K_AI_API_KEY] = v.trim() }
+    suspend fun setAiModel(v: String) = ds.edit { it[K_AI_MODEL] = v.trim() }
+    suspend fun setOverlayGuideShown(v: Boolean) = ds.edit { it[K_OVERLAY_GUIDE] = v }
 
     companion object {
         private val K_VIBRATE = booleanPreferencesKey("vibrate_on_question")
@@ -67,6 +86,10 @@ class SettingsRepository private constructor(context: Context) {
         private val K_SOURCE = stringPreferencesKey("download_source")
         private val K_MIC_GAIN = stringPreferencesKey("mic_gain")
         private val K_CONFIRM = booleanPreferencesKey("confirm_question")
+        private val K_AI_BASE_URL = stringPreferencesKey("ai_base_url")
+        private val K_AI_API_KEY = stringPreferencesKey("ai_api_key")
+        private val K_AI_MODEL = stringPreferencesKey("ai_model")
+        private val K_OVERLAY_GUIDE = booleanPreferencesKey("overlay_guide_shown")
 
         @Volatile
         private var instance: SettingsRepository? = null

@@ -327,3 +327,78 @@
 - 待真机：①通知上暂停/继续/结束在小米/vivo 各类 ROM 是否都显示 action（厂商可能折叠通知 action）；
   ②悬浮窗拖动手感、展开宽度与不挡操作、TYPE_APPLICATION_OVERLAY 在国产 ROM 的权限与保活；
   ③暂停数分钟后继续，识别与计时是否正确、麦克风不会被其他应用抢占后无法恢复。
+
+
+---
+
+## 13. 第七轮：设置二级化、AI 解答（自带端点）、关于页、权限主动申请、自有签名框架
+
+> 与前文冲突处以本节为准。版本升到 **versionCode 2 / versionName "0.2.0-beta"**，发预发行 v0.2.0-beta。
+
+### 13.1 设置页二级菜单重构（SettingsScreen 重写）
+- 不再把单选项全部平铺；主页只放“当前值”的可点行，点击弹 `AlertDialog` 单选列表（通用 `PickerState/PickerOpt`）。
+- 分组：提问检测（灵敏度弹窗 / 保留L1 / 二次确认）、提醒与悬浮窗（震动 / 悬浮控制窗）、录音与识别（录音增益弹窗 / 模型下载源弹窗）、
+  AI 解答（进 AiSettingsScreen，副标题显示已配置/未配置）、其他（权限与后台保活 / 关于与隐私）。
+- 私有组件：`SectionTitle/GroupCard/OptionRow(点击弹窗)/NavRow(跳子页)/SwitchRow/CellDivider`。
+- “权限与后台保活”行：缺通知权限先申请，否则引导电池优化白名单，都齐则 Toast。
+
+### 13.2 AI 解答（重点：用户自带 OpenAI 兼容端点，App 不内置任何 Key/代理）
+- 数据：`AppSettings` 新增 `aiBaseUrl/aiApiKey/aiModel(默认 gpt-4o-mini)/overlayGuideShown`；DataStore key 见 SettingsRepository。
+- 网络层（新包 `ai/`，复用既有 okhttp，**未加任何新网络依赖**；JSON 用系统 org.json）：
+  - `AiProtocol.kt`（纯 Kotlin、可单测）：normalizeBase（去尾斜杠/容错用户填到 /chat/completions）、chatEndpoint、
+    isReady（http(s)+key 非空）、buildRequestBody（非流式、temperature0.3、system+user）、parseAnswer（取 choices[0].message.content，
+    识别 error/缺字段/空内容并抛错）。system prompt 内置“大学课程助教、简体、分点、≤300字、不复述”。
+  - `AiClient.kt`：suspend ask()，POST `{base}/chat/completions`，`Authorization: Bearer`，connect12/read90s，Dispatchers.IO。
+  - 单测 `AiProtocolTest`（8 个）。为在 JVM 单测用到真实 org.json，`app/build.gradle.kts` 加
+    `testImplementation("org.json:json:20240303")`（仅测试期、不进 APK）。
+- UI：
+  - `ui/settings/AiSettingsScreen.kt`：端点/Key（PasswordVisualTransformation）/模型三个输入框，5 个常用兼容端点快捷 chip
+    （OpenAI/DeepSeek/通义兼容模式/硅基流动/本地 Ollama），状态胶囊，隐私说明；onChange 直接落 DataStore。
+  - `ui/ai/AiAnswerDialog.kt`：`Dialog` 弹层，Loading/Success/Error/NotConfigured 四态，成功可复制、失败可重试、未配置可跳设置。
+  - 入口在录制页 `ControlDock`：**保留**原“分享”（ACTION_SEND 系统分享），新增“解答”按钮（AutoAwesome）走 AiAnswerDialog；
+    RecordScreen 新增 `aiQuestion` 状态与 `onOpenSettings` 回调（未配置时可从弹层跳设置）。
+- 隐私边界（写进关于页与 AI 设置页）：仅用户主动点“解答”时把**这一句问题文本**发往其自填端点；音频与其他文本不发；Key 只存本机、卸载即清。
+  这是用户明确新增的远程能力，**本地提问检测仍是轻量规则+35KB 小模型，APK 不打包任何大模型**，别混淆。
+
+### 13.3 关于页（AboutScreen，独立路由 Routes.ABOUT）
+- 详细卡片：头部（名称/版本 versionName+versionCode/一句话）、核心功能、隐私承诺、技术栈、开源与致谢；
+- 可点击链接（Intent ACTION_VIEW）：作者 GitHub 主页 `https://github.com/STAR-10086`、仓库 `https://github.com/STAR-10086/ShuiKeBang`。
+
+### 13.4 权限主动申请（IdleScreen 重写）
+- 点“开始记录”统一走 `requestThenStart()`：用 `RequestMultiplePermissions` 一次性申请当前缺失的
+  RECORD_AUDIO 与（Android13+）POST_NOTIFICATIONS；回调只要麦克风授予就继续。
+- 悬浮窗是**特殊权限、系统不提供标准授权弹窗**（只能跳 Settings.ACTION_MANAGE_OVERLAY_PERMISSION，别尝试 requestPermission）：
+  麦克风就绪后 `proceed()`，若设置里开了悬浮窗、当前无权限且没引导过（overlayGuideShown=false），先弹**说明性 AlertDialog**，
+  “去开启”跳系统悬浮窗设置并标记已引导，“暂不”也标记并照常开始录音（无权限自动降级为前台通知，不阻塞）。
+
+### 13.5 自有 release 签名框架（用户问“怎么用自己的签名”）
+- `app/build.gradle.kts`：顶部 import Properties/FileInputStream；读 `local.properties`（其次同名环境变量，给 CI 用）的
+  RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD，构建 `signingConfigs.release`；
+  release buildType **配到了就用 release 签名、没配回退 debug**（CI 无 keystore 仍能出可安装 beta 包）。
+- 仓库新增 `local.properties.example` 模板（含 keytool 生成命令，注释态）；`.gitignore` 增补 `*.jks`（local.properties、*.keystore 本就忽略）。
+- 用户操作：`keytool -genkeypair -v -keystore shuikebang-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias shuikebang`，
+  把四个键写进 local.properties 即可，本地 `assembleRelease` 就是自有签名；**私钥密码不入库、不经过 Agent**。
+- 将来 CI 正式签名：workflow 里把 base64 jks 存 secret 解码成文件，再用 env 注入四个 RELEASE_* 变量（gradle 已支持读环境变量）。
+
+### 13.6 动画规划（本轮只规划、未实现，下轮按需做）
+原则：只用 Compose 声明式动画（GPU 友好的属性/透明度动画），不引 Lottie 等重依赖、不做持续高频空转，避免无谓重组。
+候选（按性价比排序）：
+1. 提问卡片入场：`AnimatedVisibility`+`slideInVertically/fadeIn`，命中瞬间弹性 `scale 1.04→1f`（spring, DampingRatioMediumBouncy）
+   + 背景色短暂脉冲（animateColorAsState 从 RecordSoft 到高亮再回落），强化“被点到”的感知。
+2. 列表动画：转录 LazyColumn `Modifier.animateItem()`（foundation 1.7 稳定），新行平滑插入、提问升级为卡片时不跳变。
+3. 状态切换：待机↔准备↔录音中↔暂停用 `AnimatedContent`/`Crossfade` 过渡 RecStatusBar；暂停按钮图标 `AnimatedContent` 旋转 morph。
+4. 录音波形：把现有静态波形换成按 RMS 驱动的等高条（用识别回调里的音量做 animateFloat，限 3–5 根条、`infiniteTransition` 仅在录音中运行，暂停/离开立即停）。
+5. 悬浮窗展开/收起：原生 Window 无法用 Compose 动画，改 ValueAnimator 对高度/透明度做 160ms 插值；拖动松手加轻微回弹。
+6. 页面转场：NavHost `composable(enterTransition/exitTransition)` 做统一 220ms 横向滑动+淡入（注意给 RecordScreen 保留状态）。
+7. 设置弹窗/AI 弹层：AlertDialog/Dialog 内容用 `animateContentSize`；按钮按压已有 ripple，不必再加。
+落地注意：动画状态用 `remember`/`Animatable`，不要在滚动列表里每帧分配对象；弱机关闭部分非必要动画（可加“减少动态效果”开关，低优先）。
+
+### 13.7 “从没看到胶囊通知”的根因（用户说先不管，仅记录）
+四级岛里：L1 小米/vivo 原生焦点通知/原子通知**需要 App 上架后向厂商邮件申请展示授权**，未授权时 VendorIslandNotifier 直接静默 return；
+L2 悬浮窗需要“显示在其他应用上层”授权（本轮已做首次引导）。所以普通未授权、未上架机型上实际只有 L3 前台通知（第六轮已升级为可交互），
+这是预期降级而非 bug；真机若已授悬浮窗权限仍不显示，再查 OverlayCapsule 的 TYPE_APPLICATION_OVERLAY 与国产 ROM 后台弹出界面权限。
+
+### 13.8 发版
+- workflow release job 的 softprops/action-gh-release 增加 prerelease 动态判定（tag 名含 beta/alpha/rc 即标预发行）并更新 release body；
+- 本地 `:app:testDebugUnitTest / :app:lintDebug / :app:assembleRelease -PsplitAbi` 全过后提交推送 main，CI verify 绿再打 `v0.2.0-beta` 触发三架构包，
+  gh 确认 Release 被勾选 Pre-release。

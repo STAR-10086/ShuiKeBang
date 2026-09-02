@@ -25,6 +25,7 @@
 - [工程目录](#工程目录)
 - [快速开始](#快速开始)
 - [模型动态下发](#模型动态下发)
+- [自有签名（可选）](#自有签名可选)
 - [提问检测规则（可调）](#提问检测规则可调)
 - [状态岛四级降级](#状态岛四级降级)
 - [设置项](#设置项)
@@ -48,6 +49,7 @@
 - **多下载源可选**：自动 / ghfast / gh-proxy / GitHub 官方，失败自动回退（国内直连友好）。
 - **后台可控的状态岛**：小米超级岛 / vivo 原子岛 → 自绘悬浮控制窗 → 前台常驻通知逐级降级，纯本地、**不接入任何 Push**。前台通知可直接「暂停/继续 · 结束并保存」、展开查看最近提问；悬浮窗可拖动、展开看问题并操作，切到其他 App 也能用。
 - **暂停 / 继续**：暂停时停止采集与计时但保留会话，随时继续；计时只统计真正录音的时长，通知、悬浮窗、录制页三处都能操作。
+- **可选 AI 解答（自带端点）**：录制页点「解答」，把这一句问题发给你自己配置的 OpenAI 兼容端点（OpenAI / DeepSeek / 通义兼容模式 / 硅基流动 / 本地 Ollama 等）直接获取答案；App **不内置任何 API Key、不代理请求**，仅在你主动点击时发送该问题文本，原「分享」系统分享面板保留。
 
 ## 技术栈
 
@@ -58,7 +60,7 @@
 | 离线 ASR | `com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v1.13.7`（JitPack） | Streaming Zipformer，真流式 |
 | 本地存储 | Room 2.6.1 | 只存文本 / 时间戳，不存音频 |
 | 偏好存储 | DataStore Preferences | 设置项持久化 |
-| 网络 | OkHttp 4.12 | **仅**用于模型下载，断点续传 |
+| 网络 | OkHttp 4.12 | 模型下载（断点续传）+ 用户自配端点的 AI 解答 |
 | 解压 | commons-compress 1.27.1 | zip / tar.bz2 |
 | 后台 | LifecycleService + 前台服务（microphone 类型） | 录音保活 |
 
@@ -100,6 +102,7 @@ app/src/main/java/com/star/shuikebang/
 ├─ data/
 │  ├─ db/                                #   Room：会话 / 转录 / 提问三表
 │  └─ prefs/SettingsRepository.kt        #   DataStore 设置
+├─ ai/                                   # AI 解答：OpenAI 兼容协议 AiProtocol/AiClient（用户自带 Key）
 ├─ service/                              # RecordService 编排 + RecSession 状态
 ├─ island/                               # 厂商岛 / 可操作悬浮窗 / 可交互前台通知
 ├─ feedback/Hapticx.kt                   # 震动
@@ -110,7 +113,8 @@ app/src/main/java/com/star/shuikebang/
    ├─ model/       模型下载与下载源选择
    ├─ record/      录制页（实时转录 + 提问卡 + 底部操作）
    ├─ history/     历史列表 / 会话详情
-   ├─ settings/    设置页
+   ├─ settings/    设置主页（二级弹窗选择）/ AI 端点配置页 / 关于与隐私页
+   ├─ ai/          AI 解答弹层（加载 / 成功 / 失败 / 未配置四态）
    ├─ component/   复用组件（状态条、提问卡、操作坞）
    └─ theme/       设计令牌（颜色 / 字体 / 主题）
 ```
@@ -158,6 +162,25 @@ sdk.dir=D\:\\apps\\AndroidSDK
 | debug | `app/build/outputs/apk/debug/app-debug.apk` | 模拟器（含 x86_64） |
 
 > 加 `-PsplitAbi` 一次产出 `app-arm64-v8a-release.apk`（约 12MB）、`app-armeabi-v7a-release.apk`（约 11MB）、`app-universal-release.apk`（约 22MB）；不加开关只打 arm64-v8a。当前用 debug 签名，正式上架前需替换为自有 keystore。**推送 `v*` tag 时 GitHub Actions 会自动构建三架构并发布 Release**（见 `.github/workflows/android.yml`）。
+
+## 自有签名（可选）
+
+Release 默认用 debug 签名以便快速侧载；要出正式签名包：
+
+```powershell
+# 1) 生成 keystore（只需一次，妥善保管，丢了将无法对同一应用覆盖升级）
+keytool -genkeypair -v -keystore shuikebang-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias shuikebang
+```
+
+```properties
+# 2) 写入工程根目录 local.properties（已被 .gitignore 忽略，*.jks 同样忽略）
+RELEASE_STORE_FILE=shuikebang-release.jks
+RELEASE_STORE_PASSWORD=你的密钥库密码
+RELEASE_KEY_ALIAS=shuikebang
+RELEASE_KEY_PASSWORD=你的密钥密码
+```
+
+之后 `:app:assembleRelease` 即自动使用自有签名；四个键缺失时回退 debug 签名并继续构建。CI 上把 keystore base64 存为 secret、在 workflow 解码成文件并设置同名环境变量即可，无需改构建脚本。
 
 ## 模型动态下发
 
@@ -214,15 +237,15 @@ sdk.dir=D\:\\apps\\AndroidSDK
 
 ## 设置项
 
-`ui/settings/SettingsScreen.kt` + DataStore 持久化：
+设置采用「分组 + 二级选择」：主页只显示当前值，点击行弹出单选（灵敏度 / 增益 / 下载源），复杂配置进入子页。DataStore 持久化：
 
-- 提问检测灵敏度（灵敏 / 均衡 / 保守 / 关闭）
-- 是否保留 L1「可能被提问」预警
-- 检测到提问时是否震动
-- 悬浮控制窗开关（默认开；开启时引导授予悬浮窗权限，未授权降级为通知控制）
-- 模型下载源（自动 / ghfast / gh-proxy / GitHub 官方）
-- 麦克风增益（自动 / 关闭 / 2 倍 / 3 倍 / 5 倍）
-- 提问二次确认开关（延迟确认、撤销自问自答）
+- **提问检测**：灵敏度（灵敏 / 均衡 / 保守 / 关闭，弹窗选）、保留 L1「可能被提问」预警、提问二次确认（延迟确认、撤销自问自答）
+- **提醒与悬浮窗**：检测到提问时震动、悬浮控制窗开关（默认开；开启时引导授予悬浮窗权限，未授权降级为通知控制）
+- **录音与识别**：麦克风增益（自动 / 关闭 / 2 / 3 / 5 倍，弹窗选）、模型下载源（自动 / ghfast / gh-proxy / GitHub 官方，弹窗选）
+- **AI 解答**：进入子页填写端点 Base URL、API Key、模型名，提供常见兼容端点快捷填入；Key 仅存本机
+- **其他**：权限与后台保活引导、关于与隐私（版本 / 功能 / 技术栈 / 隐私 / 致谢，含可点击的作者 GitHub 与仓库链接）
+
+> 开始录音时会自动申请麦克风与（Android 13+）通知权限；悬浮窗属系统特殊权限、无法直接弹授权框，首次会弹说明并跳转系统设置。
 
 ## 测试
 
@@ -230,7 +253,7 @@ sdk.dir=D\:\\apps\\AndroidSDK
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-当前单测聚焦最易出错的提问检测：正向疑问句、点名 L1、核心问题剥除、**讲课陈述反例（不得误报）**、弱词旁证、四档灵敏度差异、中英文本归一；另含 `AudioPreampTest`（增益/AGC/软限幅边界）、`SelfAnswerDetectorTest`（跨句自问自答判定）、`ArchiveSafetyTest`（解压路径穿越防护）。
+当前单测聚焦最易出错的提问检测：正向疑问句、点名 L1、核心问题剥除、**讲课陈述反例（不得误报）**、弱词旁证、四档灵敏度差异、中英文本归一；另含 `AudioPreampTest`（增益/AGC/软限幅边界）、`SelfAnswerDetectorTest`（跨句自问自答判定）、`ArchiveSafetyTest`（解压路径穿越防护）、`AiProtocolTest`（端点规整 / 请求体构造 / 响应解析与错误分支）。
 
 ## 真机自测清单
 
@@ -248,14 +271,15 @@ sdk.dir=D\:\\apps\\AndroidSDK
 
 - ❌ 不保存原始录音（只存识别后的文字）
 - ❌ 不导入外部音频文件转写（仅麦克风实时流）
-- ❌ 无 AI 总结 / 问答 / 思维导图（「问 AI」按钮仅调起系统分享面板 ACTION_SEND）
-- ❌ 无云同步、无账号登录（除模型下载外无任何网络请求）；`android:allowBackup=false`，课堂文本不进入 Google 系统云备份 / 换机迁移，卸载即彻底清除
+- ❌ 不内置任何 AI 总结 / 大模型问答 / 思维导图，**APK 本地不打包任何大模型**
+- ✅ 仅提供一个**可选**「AI 解答」：由用户自填 OpenAI 兼容端点与 Key，主动点击时才把这一句问题文本发往其自填端点（App 不内置 Key、不中转、不收集）；「分享」仍可调起系统分享面板 ACTION_SEND
+- ❌ 无云同步、无账号登录（除模型下载与用户主动发起的 AI 解答外无任何网络请求）；`android:allowBackup=false`，课堂文本不进入 Google 系统云备份 / 换机迁移，卸载即彻底清除
 - ❌ 无广告、无社区、无分享 Feed
 
 ## 已知限制与后续
 
 - 小米超级岛 / vivo 原子岛的通知 extras 按公开文档实现，**尚待目标真机校准**（建议 HyperOS 小米 14/15、OriginOS 4/5 vivo 机型）；不支持时自动降级 L3 通知，功能不受影响。
-- Release 当前复用 debug 签名，正式上架需配置自有 keystore。
+- Release 默认回退 debug 签名；已搭好**自有签名框架**：在 `local.properties` 配置 `RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD`（模板见 `local.properties.example`）即用自有 keystore，CI 可经同名环境变量注入。
 - Release 提供 arm64-v8a / armeabi-v7a / universal 三架构包（CI 加 `-PsplitAbi` 产出）；debug 默认 arm64-v8a + x86_64 以便模拟器调试。
 - 后续可选项：watchOS 对应能力在 Android 为手表通知（暂未做）、平板横竖屏自适应。
 

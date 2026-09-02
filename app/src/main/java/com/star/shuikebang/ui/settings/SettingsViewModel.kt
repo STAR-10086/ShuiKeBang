@@ -25,4 +25,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setSource(id: String) = viewModelScope.launch { repo.setDownloadSource(id) }
     fun setMicGain(id: String) = viewModelScope.launch { repo.setMicGain(id) }
     fun setConfirmQuestion(v: Boolean) = viewModelScope.launch { repo.setConfirmQuestion(v) }
+    fun setAiBaseUrl(v: String) = viewModelScope.launch { repo.setAiBaseUrl(v) }
+    fun setAiApiKey(v: String) = viewModelScope.launch { repo.setAiApiKey(v) }
+    fun setAiModel(v: String) = viewModelScope.launch { repo.setAiModel(v) }
+    fun setOverlayGuideShown(v: Boolean) = viewModelScope.launch { repo.setOverlayGuideShown(v) }
 }

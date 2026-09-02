@@ -36,6 +36,7 @@ import com.star.shuikebang.data.db.QuestionEntity
 import com.star.shuikebang.service.RecSession
 import com.star.shuikebang.service.RecordService
 import com.star.shuikebang.service.UtteranceLine
+import com.star.shuikebang.ui.ai.AiAnswerDialog
 import com.star.shuikebang.ui.component.ControlDock
 import com.star.shuikebang.ui.component.QuestionCard
 import com.star.shuikebang.ui.component.RecStatusBar
@@ -50,7 +51,7 @@ import com.star.shuikebang.util.Clip
 import com.star.shuikebang.util.TimeFmt
 
 @Composable
-fun RecordScreen(onStopped: () -> Unit) {
+fun RecordScreen(onStopped: () -> Unit, onOpenSettings: () -> Unit = {}) {
     val context = LocalContext.current
     val ui by RecSession.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -73,6 +74,7 @@ fun RecordScreen(onStopped: () -> Unit) {
 
     // 启动失败（模型下载失败/引擎初始化失败）：弹窗提示并退回首页，不再卡在假"记录中"
     var errorDialog by remember { mutableStateOf<String?>(null) }
+    var aiQuestion by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(ui.error) {
         if (!ui.error.isNullOrBlank()) errorDialog = ui.error
     }
@@ -153,6 +155,11 @@ fun RecordScreen(onStopped: () -> Unit) {
                 val all = ui.lines.joinToString("\n") { "${TimeFmt.stamp(it.ts)} ${it.text}" }
                 Clip.copy(context, all, "全部文本已复制")
             },
+            onAiAnswer = {
+                aiQuestion = ui.questions.lastOrNull()?.coreQuestion
+                    ?: ui.lines.lastOrNull()?.text.orEmpty()
+                if (aiQuestion.isNullOrBlank()) aiQuestion = "暂无可解答的内容"
+            },
             onAskAi = {
                 val latest = ui.questions.lastOrNull()?.coreQuestion
                     ?: ui.lines.lastOrNull()?.text.orEmpty()
@@ -176,6 +183,14 @@ fun RecordScreen(onStopped: () -> Unit) {
             },
         )
         Spacer(Modifier.height(12.dp))
+    }
+
+    aiQuestion?.let { q ->
+        AiAnswerDialog(
+            question = q,
+            onDismiss = { aiQuestion = null },
+            onOpenSettings = onOpenSettings,
+        )
     }
 }
 

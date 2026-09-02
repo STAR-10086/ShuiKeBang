@@ -11,6 +11,7 @@ app/build/
 *.apk
 *.aab
 *.keystore
+*.jks
 !debug.keystore
 
 # 本地研究素材与模型分发物（模型走 GitHub Release，不进仓库）

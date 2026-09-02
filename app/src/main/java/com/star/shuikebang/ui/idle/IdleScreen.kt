@@ -2,6 +2,7 @@ package com.star.shuikebang.ui.idle
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -10,7 +11,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,12 +30,18 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,13 +55,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.star.shuikebang.asr.BuiltinModels
 import com.star.shuikebang.asr.ModelManager
+import com.star.shuikebang.data.prefs.AppSettings
+import com.star.shuikebang.data.prefs.SettingsRepository
+import com.star.shuikebang.perm.PermissionHelper
 import com.star.shuikebang.ui.theme.Brand
 import com.star.shuikebang.ui.theme.BrandSoft
 import com.star.shuikebang.ui.theme.CardWhite
-import com.star.shuikebang.ui.theme.DividerLine
 import com.star.shuikebang.ui.theme.OkGreen
 import com.star.shuikebang.ui.theme.TextMain
 import com.star.shuikebang.ui.theme.TextSub
+import kotlinx.coroutines.launch
 
 @Composable
 fun IdleScreen(
@@ -65,13 +74,51 @@ fun IdleScreen(
     onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val modelReady by produceState(initialValue = false) {
         value = ModelManager.get(context).currentReadySpecOrNull() != null
     }
+    val prefs by produceState<AppSettings?>(initialValue = null) {
+        value = SettingsRepository.get(context).snapshot()
+    }
+    var showOverlayGuide by remember { mutableStateOf(false) }
 
+    // 麦克风已具备后的统一入口：按需引导悬浮窗，再真正开始
+    fun proceed() {
+        val p = prefs
+        if (p != null && p.overlayCapsule &&
+            !PermissionHelper.canDrawOverlays(context) && !p.overlayGuideShown
+        ) {
+            showOverlayGuide = true
+        } else {
+            onStartRecording()
+        }
+    }
+
+    // 一次性申请当前缺失的运行时权限（麦克风 + Android13 通知），回调后只要麦克风就绪就继续
     val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> if (granted) onStartRecording() }
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        val micOk = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (micOk) proceed()
+    }
+
+    fun requestThenStart() {
+        val missing = buildList {
+            val micOk = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!micOk) add(Manifest.permission.RECORD_AUDIO)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !PermissionHelper.hasPostNotifications(context)
+            ) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (missing.isEmpty()) proceed() else permLauncher.launch(missing.toTypedArray())
+    }
 
     Column(
         Modifier
@@ -117,12 +164,7 @@ fun IdleScreen(
                     .size(138.dp)
                     .clip(CircleShape)
                     .background(Brand)
-                    .clickable {
-                        val granted = ContextCompat.checkSelfPermission(
-                            context, Manifest.permission.RECORD_AUDIO,
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (granted) onStartRecording() else permLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    },
+                    .clickable { requestThenStart() },
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -209,5 +251,40 @@ fun IdleScreen(
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = TextSub)
         }
         Spacer(Modifier.height(28.dp))
+    }
+
+    if (showOverlayGuide) {
+        AlertDialog(
+            onDismissRequest = {
+                showOverlayGuide = false
+                scope.launch { SettingsRepository.get(context).setOverlayGuideShown(true) }
+                onStartRecording()
+            },
+            title = { Text("开启悬浮控制窗？") },
+            text = {
+                Text(
+                    "开启「显示在其他应用上层」权限后，切到课件、浏览器等其他应用时，" +
+                        "仍能悬浮看到录音状态和最近提问，并可暂停/结束。\n\n" +
+                        "该权限系统不支持直接弹窗授予，需要在系统设置里手动打开；暂不开启也能正常录音，" +
+                        "会自动降级为通知栏控制。",
+                    color = TextSub,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showOverlayGuide = false
+                    scope.launch { SettingsRepository.get(context).setOverlayGuideShown(true) }
+                    PermissionHelper.requestOverlay(context)
+                    onStartRecording()
+                }) { Text("去开启") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showOverlayGuide = false
+                    scope.launch { SettingsRepository.get(context).setOverlayGuideShown(true) }
+                    onStartRecording()
+                }) { Text("暂不") }
+            },
+        )
     }
 }

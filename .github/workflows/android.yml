@@ -87,16 +87,26 @@ jobs:
         with:
           name: "水课帮 Android ${{ github.ref_name }}"
           generate_release_notes: true
+          # tag 名含 beta/alpha/rc 自动标记为预发行版
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           files: |
             app/build/outputs/apk/release/shuikebang-*-arm64-v8a.apk
             app/build/outputs/apk/release/shuikebang-*-armeabi-v7a.apk
             app/build/outputs/apk/release/shuikebang-*-universal.apk
           body: |
-            课堂提问助手 Android 首个可用版本。麦克风实时收音 → 本地离线流式语音识别 → 规则+极小模型检测老师提问 → 震动/高亮/问题回溯，全程不保存录音、不上传音频。
+            课堂提问助手 Android **测试预览版（beta）**，功能可用、仍在迭代。
+
+            ### 本版更新（v0.2.0-beta）
+            - 新增「AI 解答」：录制页点「解答」，用你自己填写的 OpenAI 兼容端点/Key 让大模型直接回答（App 不内置任何 API，仅在你主动点击时发送这一句问题文本）；原系统分享保留为「分享」。
+            - 设置改为二级菜单：灵敏度、录音增益、下载源点击弹窗选择；新增独立「AI 端点与 Key」页与详细「关于与隐私」页（含作者 GitHub 主页）。
+            - 权限更主动：开始录音时自动申请麦克风/通知权限，并首次引导悬浮窗权限。
+            - 可交互前台通知 + 可拖动操作的悬浮控制窗（暂停/继续/结束、查看最近提问）。
+            - 麦克风自动增益（AGC）与多档固定放大，改善老师声音偏小导致的漏识别。
+            - 跨句自问自答延迟确认，降低“老师自问自答被误报成提问”。
 
             ### 下载说明（按手机架构选择）
             - **arm64-v8a**：2019 年后绝大多数手机，体积最小，优先选它。
             - **armeabi-v7a**：老旧 32 位 ARM 手机。
             - **universal**：全架构通用包，体积最大，不确定架构时选它。
 
-            > 安装后首次点“开始记录”会下载离线识别模型（仅这一步联网，建议 WiFi）；模型不打进 APK。release 目前使用 debug 签名，可直接侧载安装。
+            > 安装后首次点“开始记录”会下载离线识别模型（仅这一步联网，建议 WiFi），模型不打进 APK；音频全程本地离线识别、不保存不上传。beta 包当前使用 debug 签名，正式版将切换为自有签名（见 local.properties.example）。

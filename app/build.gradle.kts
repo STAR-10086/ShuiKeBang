@@ -1,9 +1,23 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+// —— 自有 release 签名：优先 local.properties，其次同名环境变量（CI 用）；都没有则回退 debug 签名 ——
+val releaseKeystore = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) FileInputStream(f).use { load(it) }
+}
+fun releaseProp(key: String): String? =
+    releaseKeystore.getProperty(key) ?: System.getenv(key)
+val releaseStore = releaseProp("RELEASE_STORE_FILE")?.let { rootProject.file(it) }
+val hasReleaseKeystore = releaseStore != null && releaseStore.exists() &&
+    releaseProp("RELEASE_KEY_ALIAS") != null
 
 // 传 -PsplitAbi 时按 ABI 拆分并额外产出 universal 全包（CI 发 Release 用）
 val splitAbi = project.hasProperty("splitAbi")
@@ -12,12 +26,23 @@ android {
     namespace = "com.star.shuikebang"
     compileSdk = 34
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = releaseStore
+                storePassword = releaseProp("RELEASE_STORE_PASSWORD")
+                keyAlias = releaseProp("RELEASE_KEY_ALIAS")
+                keyPassword = releaseProp("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.star.shuikebang"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0-beta"
         vectorDrawables { useSupportLibrary = true }
         ndk {
             if (splitAbi) {
@@ -48,8 +73,8 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            // 开发阶段先用 debug 签名产出可安装 release 包；正式发布替换为自有 keystore
-            signingConfig = signingConfigs.getByName("debug")
+            // 配了自有 keystore（local.properties / 环境变量）就用正式签名，否则回退 debug 签名
+            signingConfig = signingConfigs.getByName(if (hasReleaseKeystore) "release" else "debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -123,4 +148,6 @@ dependencies {
     implementation(libs.sherpa.onnx)
 
     testImplementation(libs.junit)
+    // JVM 单测里使用真实 org.json（主代码用 Android 自带 org.json），仅测试期、不进 APK
+    testImplementation("org.json:json:20240303")
 }

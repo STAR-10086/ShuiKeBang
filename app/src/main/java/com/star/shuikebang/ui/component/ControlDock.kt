@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -30,12 +31,11 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import com.star.shuikebang.ui.theme.BrandSoft
 import com.star.shuikebang.ui.theme.CardWhite
-import com.star.shuikebang.ui.theme.DividerLine
 import com.star.shuikebang.ui.theme.RecordRed
 import com.star.shuikebang.ui.theme.TextMain
 import com.star.shuikebang.ui.theme.TextSub
 
-/** 录音页底部 Dock：停止 / 复制 / 问AI / 标记 */
+/** 录音页底部 Dock：暂停/继续 · 停止 · 复制 · AI解答 · 系统分享 · 标记 */
 @Composable
 fun ControlDock(
     onStop: () -> Unit,
@@ -45,6 +45,7 @@ fun ControlDock(
     modifier: Modifier = Modifier,
     paused: Boolean = false,
     onTogglePause: () -> Unit = {},
+    onAiAnswer: () -> Unit = {},
 ) {
     Row(
         modifier
@@ -59,7 +60,8 @@ fun ControlDock(
         )
         DockItem(Icons.Outlined.Stop, "停止", RecordRed, CardWhite, onStop, primary = true)
         DockItem(Icons.Outlined.ContentCopy, "复制", BrandSoft, TextMain, onCopy)
-        DockItem(Icons.Outlined.AutoAwesome, "问AI", BrandSoft, TextMain, onAskAi)
+        DockItem(Icons.Outlined.AutoAwesome, "解答", BrandSoft, TextMain, onAiAnswer)
+        DockItem(Icons.Outlined.Share, "分享", BrandSoft, TextMain, onAskAi)
         DockItem(Icons.Outlined.BookmarkBorder, "标记", BrandSoft, TextMain, onMark)
     }
 }
@@ -76,7 +78,7 @@ private fun DockItem(
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
-                .size(if (primary) 58.dp else 50.dp)
+                .size(if (primary) 56.dp else 48.dp)
                 .clip(CircleShape)
                 .background(bg)
                 .clickable(onClick = onClick),
@@ -86,13 +88,13 @@ private fun DockItem(
                 icon,
                 contentDescription = label,
                 tint = fg,
-                modifier = Modifier.size(if (primary) 28.dp else 23.dp),
+                modifier = Modifier.size(if (primary) 27.dp else 22.dp),
             )
         }
         Text(
             label,
             color = TextSub,
-            fontSize = TextUnit(11f, TextUnitType.Sp),
+            fontSize = TextUnit(10.5f, TextUnitType.Sp),
             modifier = Modifier.padding(top = 4.dp),
         )
     }

@@ -1,0 +1,15 @@
+# 复制为 local.properties 后按需修改；该文件已被 .gitignore 忽略，不会进仓库。
+# 本机 Android SDK 路径（必填，按你的实际路径）
+sdk.dir=D\:\\apps\\AndroidSDK
+
+# —— 自有 release 签名（可选）——
+# 不填这些键时，release 包回退为 debug 签名，方便本地/CI 先出可安装测试包。
+# 生成 keystore（只需一次，务必记牢密码，丢了将无法给同一应用升级覆盖安装）：
+#   keytool -genkeypair -v -keystore shuikebang-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias shuikebang
+#
+# RELEASE_STORE_FILE 相对工程根目录（本文件所在目录），也可写绝对路径
+# RELEASE_STORE_FILE=shuikebang-release.jks
+# RELEASE_STORE_PASSWORD=你的密钥库密码
+# RELEASE_KEY_ALIAS=shuikebang
+# RELEASE_KEY_PASSWORD=你的密钥密码
