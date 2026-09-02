@@ -25,6 +25,10 @@ enum class DetectSensitivity { HIGH, NORMAL, LOW, OFF }
  */
 class QuestionDetector(
     private var sensitivity: DetectSensitivity = DetectSensitivity.NORMAL,
+    // 极小字级分类器，仅对"含疑问信号但规则拿不准"的中文灰区句做概率仲裁；null 时纯规则
+    private val ml: QuestionMlClassifier? = null,
+    // ML 翻转规则结论所需概率：取偏保守值，宁少勿滥
+    private val mlThreshold: Float = 0.55f,
 ) {
 
     fun setSensitivity(s: DetectSensitivity) {
@@ -85,9 +89,18 @@ class QuestionDetector(
             DetectSensitivity.OFF -> false
         }
 
+        // ML 歧义仲裁：仅当句中确有疑问信号、而规则未达高置信确认时才跑模型（省算力、防纯陈述误报）。
+        // 覆盖两类：①规则怀疑"自问自答"而压制；②弱疑问结构规则不敢确认。模型对自问自答/讲课陈述输出低概率。
+        val hasInterrogativeSignal = strong != null || strongSoft != null || weak != null ||
+            hasQuestionMark || tailMa
+        val finalConfirmed = confirmed || (
+            ml != null && !confirmed && hasInterrogativeSignal &&
+                ml.score(raw) >= mlThreshold
+        )
+
         val core = extractZhCore(raw)
         return when {
-            confirmed -> QuestionDetection(
+            finalConfirmed -> QuestionDetection(
                 level = 2,
                 hitKeyword = strong ?: strongSoft ?: weak ?: callStrong ?: if (tailMa) "吗" else "?",
                 rawSentence = raw,

@@ -25,6 +25,7 @@ import com.star.shuikebang.feedback.Hapticx
 import com.star.shuikebang.island.StatusIsland
 import com.star.shuikebang.nlp.DetectSensitivity
 import com.star.shuikebang.nlp.QuestionDetector
+import com.star.shuikebang.nlp.QuestionMlClassifier
 import com.star.shuikebang.util.TimeFmt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,7 +55,9 @@ class RecordService : LifecycleService() {
         super.onCreate()
         repo = ClassRepository.get(this)
         models = ModelManager.get(this)
-        detector = QuestionDetector(DetectSensitivity.NORMAL)
+        // 加载约 35KB 的极小提问分类器（失败返回 null，检测器自动回退纯规则）
+        val ml = QuestionMlClassifier.fromAssets(this)
+        detector = QuestionDetector(DetectSensitivity.NORMAL, ml)
         island = StatusIsland(this)
         settingsRepo = SettingsRepository.get(this)
     }
