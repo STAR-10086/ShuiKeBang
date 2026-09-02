@@ -40,6 +40,7 @@ import com.star.shuikebang.ui.ai.AiAnswerDialog
 import com.star.shuikebang.ui.component.ControlDock
 import com.star.shuikebang.ui.component.QuestionCard
 import com.star.shuikebang.ui.component.RecStatusBar
+import com.star.shuikebang.ui.theme.Brand
 import com.star.shuikebang.ui.theme.CardWhite
 import com.star.shuikebang.ui.theme.PageBg
 import com.star.shuikebang.ui.theme.RecordLine
@@ -172,14 +173,8 @@ fun RecordScreen(onStopped: () -> Unit, onOpenSettings: () -> Unit = {}) {
                 })
             },
             onMark = {
-                // 轻量标记：插入一条普通标记行（不落音频）
-                RecSession.update {
-                    it.copy(
-                        lines = it.lines + UtteranceLine(
-                            System.currentTimeMillis(), "【标记重点】", level = 0,
-                        ),
-                    )
-                }
+                // 标记重点：交给 Service 落库（停止后历史里仍可见），并实时上屏高亮
+                RecordService.mark(context)
             },
         )
         Spacer(Modifier.height(12.dp))
@@ -196,10 +191,14 @@ fun RecordScreen(onStopped: () -> Unit, onOpenSettings: () -> Unit = {}) {
 
 @Composable
 private fun TranscriptRow(line: UtteranceLine) {
+    val isMark = line.level == RecordService.LEVEL_MARK
     Column(
         Modifier
             .fillMaxWidth()
-            .background(CardWhite, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(
+                if (isMark) Brand.copy(alpha = 0.10f) else CardWhite,
+                androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            )
             .padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Text(
@@ -209,7 +208,8 @@ private fun TranscriptRow(line: UtteranceLine) {
         )
         Text(
             line.text,
-            color = TextMain,
+            color = if (isMark) Brand else TextMain,
+            fontWeight = if (isMark) FontWeight.SemiBold else FontWeight.Normal,
             fontSize = TextUnit(14f, TextUnitType.Sp),
             modifier = Modifier.padding(top = 2.dp),
         )

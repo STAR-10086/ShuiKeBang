@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+      明文 HTTP 策略：
+      应用层 AiProtocol 已强制「外部端点必须 HTTPS，仅本机/局域网地址允许 http://」。
+      Android 的 networkSecurityConfig 只支持按具体域名/IP 配置、不支持 CIDR 网段，
+      无法静态枚举 192.168.* / 10.* 等局域网地址（用户手机访问电脑上的 Ollama/LM Studio 时需要），
+      因此这里放开明文，真正的受控约束放在应用层：任何公网主机的 http:// 都会被直接判为不可用。
+      模型下载与外部 AI 服务默认都是 https，不受影响。
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

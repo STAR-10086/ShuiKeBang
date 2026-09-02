@@ -18,12 +18,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +58,10 @@ fun HistoryListScreen(
     vm: HistoryViewModel = viewModel(),
 ) {
     val sessions by vm.sessions.collectAsStateWithLifecycle()
+    // 正在重命名的会话与其文本输入
+    var renaming by remember { mutableStateOf<SessionEntity?>(null) }
+    var renameText by remember { mutableStateOf("") }
+
     Column(Modifier.fillMaxSize().background(PageBg)) {
         Row(
             Modifier.padding(start = 8.dp, top = 40.dp, end = 16.dp, bottom = 4.dp),
@@ -70,15 +81,53 @@ fun HistoryListScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(sessions, key = { it.id }) { s ->
-                SessionRow(s, onClick = { onOpen(s.id) }, onDelete = { vm.delete(s) })
+                SessionRow(
+                    s,
+                    onClick = { onOpen(s.id) },
+                    onDelete = { vm.delete(s) },
+                    onRename = {
+                        renaming = s
+                        renameText = s.title
+                    },
+                )
             }
             item { Spacer(Modifier.height(16.dp)) }
         }
     }
+
+    renaming?.let { target ->
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text("重命名课堂") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val t = renameText.trim()
+                    if (t.isNotEmpty()) vm.rename(target, t)
+                    renaming = null
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renaming = null }) { Text("取消") }
+            },
+        )
+    }
 }
 
 @Composable
-private fun SessionRow(s: SessionEntity, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun SessionRow(
+    s: SessionEntity,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+    onRename: () -> Unit,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -102,6 +151,9 @@ private fun SessionRow(s: SessionEntity, onClick: () -> Unit, onDelete: () -> Un
                     Text("提问 ${s.questionCount}", color = RecordRed, fontSize = TextUnit(10.5f, TextUnitType.Sp))
                 }
             }
+        }
+        IconButton(onClick = onRename) {
+            Icon(Icons.Outlined.Edit, "重命名", tint = TextFaint)
         }
         IconButton(onClick = onDelete) {
             Icon(Icons.Outlined.DeleteOutline, "删除", tint = TextFaint)

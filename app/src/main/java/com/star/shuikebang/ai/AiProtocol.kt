@@ -29,13 +29,63 @@ object AiProtocol {
 
     fun chatEndpoint(base: String): String = normalizeBase(base) + "/chat/completions"
 
-    /** 配置是否可用：base 是 http(s) 地址且 Key 非空（本地/自建服务可能无 Key，但这里仍要求填写，避免误触） */
-    fun isReady(base: String, key: String): Boolean {
+    /** 取出主机名（去端口、去路径、小写），用于判断是否本地/局域网地址 */
+    fun hostOf(base: String): String {
+        val b = normalizeBase(base)
+        val after = b.substringAfter("://", b)
+        return after.substringBefore('/').substringBefore(':').lowercase()
+    }
+
+    /**
+     * 是否本机/局域网端点（允许明文 HTTP、允许无 Key）：
+     * localhost / 回环 / 私有网段 10/8、172.16/12、192.168/16、链路本地、CGNAT、IPv6 本地。
+     */
+    fun isLocalEndpoint(base: String): Boolean {
+        val h = hostOf(base)
+        if (h.isBlank()) return false
+        if (h == "localhost" || h.endsWith(".localhost")) return true
+        if (h == "::1" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true
+        val parts = h.split('.')
+        if (parts.size == 4 && parts.all { it.toIntOrNull()?.let { x -> x in 0..255 } == true }) {
+            val a = parts[0].toInt()
+            val b = parts[1].toInt()
+            return when {
+                a == 127 -> true                    // 127.0.0.0/8 回环
+                a == 10 -> true                     // 10.0.0.0/8
+                a == 192 && b == 168 -> true        // 192.168.0.0/16
+                a == 172 && b in 16..31 -> true     // 172.16.0.0/12
+                a == 169 && b == 254 -> true        // 169.254.0.0/16 链路本地
+                a == 100 && b in 64..127 -> true    // 100.64.0.0/10 CGNAT
+                h == "0.0.0.0" -> true
+                else -> false
+            }
+        }
+        return false
+    }
+
+    private fun usesPlainHttp(base: String): Boolean =
+        normalizeBase(base).startsWith("http://", ignoreCase = true)
+
+    /**
+     * 配置是否可用；返回 null 表示可用，否则返回不可用原因（可直接展示给用户）。
+     * 规则：
+     * - 必须是 http(s) 地址且主机非空；
+     * - 明文 HTTP 只允许本机/局域网（外部服务强制 HTTPS）；
+     * - 本机/局域网服务（Ollama/LM Studio）允许不填 Key，外部服务必须有 Key。
+     */
+    fun notReadyReason(base: String, key: String): String? {
         val b = normalizeBase(base)
         val okScheme = b.startsWith("http://", ignoreCase = true) ||
             b.startsWith("https://", ignoreCase = true)
-        return okScheme && b.length > "http://".length && key.isNotBlank()
+        if (!okScheme || hostOf(b).isBlank()) return "请填写正确的端点地址（http/https）"
+        if (usesPlainHttp(b) && !isLocalEndpoint(b)) {
+            return "外部端点必须使用 HTTPS；只有本机/局域网地址允许 http://"
+        }
+        if (!isLocalEndpoint(b) && key.isBlank()) return "外部端点需要填写 API Key（本地 Ollama/LM Studio 可留空）"
+        return null
     }
+
+    fun isReady(base: String, key: String): Boolean = notReadyReason(base, key) == null
 
     /** 构造请求体 JSON（非流式，低温，system+user 两条消息） */
     fun buildRequestBody(model: String, question: String, systemPrompt: String = SYSTEM_PROMPT): String {

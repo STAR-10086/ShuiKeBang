@@ -93,7 +93,8 @@ class ModelManager private constructor(context: Context) {
                 val staging = File(rootDir, ".${spec.id}.staging")
                 val part = File(rootDir, "${spec.id}.part")
                 staging.deleteRecursively()
-                part.delete()
+                // 断点续传：保留上次未下完的 .part；仅当它已下满（说明内容损坏/解压失败）才删除重下
+                if (partLooksComplete(part, spec)) part.delete()
                 try {
                     staging.mkdirs()
                     if (spec.files.isNotEmpty()) {
@@ -116,7 +117,7 @@ class ModelManager private constructor(context: Context) {
                     state.value = ModelState.Ready
                 } catch (e: Exception) {
                     staging.deleteRecursively()
-                    part.delete()
+                    // 保留 .part 断点，下次 ensureModel 从已下载位置续传（downloadOne 会发 Range）
                     state.value = ModelState.Failed(e.message ?: "模型下载失败")
                     throw e
                 }
@@ -157,7 +158,8 @@ class ModelManager private constructor(context: Context) {
         var downloaded = false
         for (url in candidates) {
             try {
-                part.delete()
+                // 续传同一 .part（镜像间内容一致，最终用固定 SHA-256 校验）；已下满却失败说明损坏，删除重来
+                if (partLooksComplete(part, spec)) part.delete()
                 // archiveSha256 固定后，任何被公共镜像篡改的包都会在这里被拒
                 downloadOne(url, part, spec.archiveSha256) {
                     state.value = ModelState.Downloading(part.length(), spec.sizeBytes)
@@ -253,6 +255,10 @@ class ModelManager private constructor(context: Context) {
         }
         return md.digest().joinToString("") { "%02x".format(it) }
     }
+
+    /** 断点文件是否已下满（下满仍需重下说明可能损坏）；未知总大小时不做此判断 */
+    private fun partLooksComplete(part: File, spec: AsrModelSpec): Boolean =
+        spec.sizeBytes > 0 && part.exists() && part.length() >= spec.sizeBytes
 
     fun delete(spec: AsrModelSpec) {
         modelDir(spec).deleteRecursively()

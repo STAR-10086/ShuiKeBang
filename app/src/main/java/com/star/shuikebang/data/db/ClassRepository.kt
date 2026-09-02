@@ -18,13 +18,19 @@ class ClassRepository private constructor(context: Context) {
     suspend fun startSession(title: String, lang: String, startTs: Long): Long =
         sessionDao.insert(SessionEntity(title = title, startTs = startTs, lang = lang))
 
-    suspend fun finishSession(id: Long, endTs: Long) {
+    /**
+     * 结束会话。
+     * @param actualDurationSec 真正在录音的秒数（暂停期间不计）；为空时回退为墙钟时长
+     */
+    suspend fun finishSession(id: Long, endTs: Long, actualDurationSec: Int? = null) {
         val s = sessionDao.getById(id) ?: return
         val count = questionDao.countBySession(id)
+        val duration = actualDurationSec
+            ?: ((endTs - s.startTs) / 1000).toInt().coerceAtLeast(0)
         sessionDao.update(
             s.copy(
                 endTs = endTs,
-                durationSec = ((endTs - s.startTs) / 1000).toInt().coerceAtLeast(0),
+                durationSec = duration.coerceAtLeast(0),
                 questionCount = count,
                 finished = true,
             )
@@ -53,6 +59,10 @@ class ClassRepository private constructor(context: Context) {
 
     fun observeQuestions(sessionId: Long): Flow<List<QuestionEntity>> =
         questionDao.observeBySession(sessionId)
+
+    /** 按问题 id 反查所属会话 id（点击提问通知跳转用） */
+    suspend fun sessionOfQuestion(questionId: Long): Long? =
+        questionDao.sessionOfQuestion(questionId)
 
     suspend fun markCopied(question: QuestionEntity) =
         questionDao.update(question.copy(copied = true))

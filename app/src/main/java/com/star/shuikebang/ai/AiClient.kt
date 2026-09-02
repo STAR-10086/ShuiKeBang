@@ -19,17 +19,18 @@ class AiClient(
         withContext(Dispatchers.IO) {
             val q = question.trim()
             require(q.isNotBlank()) { "问题为空" }
-            if (!AiProtocol.isReady(baseUrl, apiKey)) {
-                throw IllegalStateException("尚未配置 AI 端点或 API Key，请到「设置 - AI 解答」填写")
+            AiProtocol.notReadyReason(baseUrl, apiKey)?.let {
+                throw IllegalStateException(it)
             }
             val json = AiProtocol.buildRequestBody(model, q)
-            val req = Request.Builder()
+            val builder = Request.Builder()
                 .url(AiProtocol.chatEndpoint(baseUrl))
-                .header("Authorization", "Bearer ${apiKey.trim()}")
                 .header("Content-Type", "application/json")
-                .post(json.toRequestBody(JSON))
-                .build()
-            http.newCall(req).execute().use { resp ->
+            // 本地 Ollama / LM Studio 通常不需要 Key；仅在用户填写时才带 Authorization
+            val key = apiKey.trim()
+            if (key.isNotEmpty()) builder.header("Authorization", "Bearer $key")
+            builder.post(json.toRequestBody(JSON))
+            http.newCall(builder.build()).execute().use { resp ->
                 val text = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
                     throw RuntimeException("请求失败 HTTP ${resp.code}：${text.take(200)}")

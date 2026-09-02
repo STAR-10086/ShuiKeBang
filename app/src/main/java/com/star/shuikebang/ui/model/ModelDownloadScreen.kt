@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -26,8 +26,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,7 +44,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.star.shuikebang.asr.AsrModelSpec
 import com.star.shuikebang.asr.ModelState
 import com.star.shuikebang.ui.theme.Brand
-import com.star.shuikebang.ui.theme.BrandSoft
 import com.star.shuikebang.ui.theme.CardWhite
 import com.star.shuikebang.ui.theme.OkGreen
 import com.star.shuikebang.ui.theme.PageBg
@@ -57,6 +60,7 @@ fun ModelDownloadScreen(
     val spec by vm.selectedSpec.collectAsStateWithLifecycle()
     val state by vm.state.collectAsStateWithLifecycle()
     val sourceId by vm.sourceId.collectAsStateWithLifecycle()
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -81,7 +85,7 @@ fun ModelDownloadScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                "APK 本体仅数 MB，识别模型不打进安装包；首次开启识别时下载到应用私有目录，卸载随 App 清除。",
+                "APK 本体仅数 MB，识别模型不打进安装包；首次开启识别时下载到应用私有目录，卸载随 App 清除。点选模型即设为录音时使用的模型。",
                 color = TextSub,
                 fontSize = TextUnit(12.5f, TextUnitType.Sp),
             )
@@ -98,8 +102,36 @@ fun ModelDownloadScreen(
             SourceCard(currentId = sourceId, onSelect = vm::selectSource, options = vm.sourceOptions)
 
             Spacer(Modifier.height(4.dp))
-            DownloadCard(spec = spec, state = state, onDownload = vm::download)
+            DownloadCard(
+                spec = spec,
+                state = state,
+                onDownload = vm::download,
+                onRedownload = vm::redownload,
+                onRequestDelete = { showDeleteDialog = true },
+            )
         }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("删除该离线模型？") },
+            text = {
+                Text(
+                    "将删除「${spec.displayName}」的全部本地文件，之后录音需要重新下载。课堂记录文本不会被删除。",
+                    color = TextSub,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteSelected()
+                    showDeleteDialog = false
+                }) { Text("删除", color = RecordRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -133,7 +165,13 @@ private fun ModelOption(spec: AsrModelSpec, selected: Boolean, ready: Boolean, o
 }
 
 @Composable
-private fun DownloadCard(spec: AsrModelSpec, state: ModelState, onDownload: () -> Unit) {
+private fun DownloadCard(
+    spec: AsrModelSpec,
+    state: ModelState,
+    onDownload: () -> Unit,
+    onRedownload: () -> Unit,
+    onRequestDelete: () -> Unit,
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -161,16 +199,25 @@ private fun DownloadCard(spec: AsrModelSpec, state: ModelState, onDownload: () -
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "${state.percent}% · ${fmtMb(state.downloaded)} / ${fmtMb(state.total)}",
+                    "${state.percent}% · ${fmtMb(state.downloaded)} / ${fmtMb(state.total)}（中断后可续传）",
                     color = TextSub, fontSize = TextUnit(12f, TextUnitType.Sp),
                 )
             }
             ModelState.Extracting -> Text("正在解压模型…", color = Brand, fontSize = TextUnit(13f, TextUnitType.Sp))
-            ModelState.Ready -> Text("模型已就绪，可以开始课堂记录", color = OkGreen, fontSize = TextUnit(13f, TextUnitType.Sp))
+            ModelState.Ready -> {
+                Text("模型已就绪，开始记录时会使用该模型", color = OkGreen, fontSize = TextUnit(13f, TextUnitType.Sp))
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedButton(onClick = onRedownload, modifier = Modifier.weight(1f)) { Text("重新下载") }
+                    OutlinedButton(onClick = onRequestDelete, modifier = Modifier.weight(1f)) {
+                        Text("删除模型", color = RecordRed)
+                    }
+                }
+            }
             is ModelState.Failed -> {
                 Text("下载失败：${state.message}", color = RecordRed, fontSize = TextUnit(12.5f, TextUnitType.Sp))
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) { Text("重试") }
+                OutlinedButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) { Text("断点续传重试") }
             }
         }
         Spacer(Modifier.height(10.dp))

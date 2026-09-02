@@ -50,7 +50,8 @@ private val PRESETS = listOf(
     EndpointPreset("DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat"),
     EndpointPreset("通义千问", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
     EndpointPreset("硅基流动", "https://api.siliconflow.cn/v1", "Qwen/Qwen2.5-7B-Instruct"),
-    EndpointPreset("本地 Ollama", "http://手机能访问的IP:11434/v1", "llama3.1"),
+    EndpointPreset("Ollama(模拟器/本机)", "http://10.0.2.2:11434/v1", "llama3.1"),
+    EndpointPreset("LM Studio(局域网)", "http://手机能访问的IP:1234/v1", "local-model"),
 )
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
@@ -61,6 +62,7 @@ fun AiSettingsScreen(
 ) {
     val s by vm.settings.collectAsStateWithLifecycle()
     val ready = AiProtocol.isReady(s.aiBaseUrl, s.aiApiKey)
+    val readyReason = AiProtocol.notReadyReason(s.aiBaseUrl, s.aiApiKey)
 
     Column(Modifier.fillMaxSize().background(PageBg)) {
         Row(
@@ -82,10 +84,10 @@ fun AiSettingsScreen(
                     "才把这一句问题文本发送到你填写的端点；录音与音频始终留在本机、不会上传。",
             )
 
-            StatusPill(ready)
+            StatusPill(ready, if (s.aiBaseUrl.isBlank()) null else readyReason)
 
             Field("端点 Base URL（填到 /v1）", s.aiBaseUrl, "https://api.openai.com/v1") { vm.setAiBaseUrl(it) }
-            Field("API Key", s.aiApiKey, "sk-...", password = true) { vm.setAiApiKey(it) }
+            Field("API Key（本地 Ollama / LM Studio 可留空）", s.aiApiKey, "sk-...（本地服务可不填）", password = true) { vm.setAiApiKey(it) }
             Field("模型名", s.aiModel, AiProtocol.DEFAULT_MODEL) { vm.setAiModel(it) }
 
             Text("快捷填入常见兼容端点", color = TextFaint, fontSize = TextUnit(12f, TextUnitType.Sp),
@@ -110,7 +112,9 @@ fun AiSettingsScreen(
 
             NoteCard(
                 "兼容任何 OpenAI Chat Completions 协议的服务：官方 OpenAI、DeepSeek、通义千问兼容模式、" +
-                    "硅基流动、OneAPI 中转，或本地 Ollama / LM Studio（地址填手机能访问的局域网 IP，不能用 127.0.0.1）。\n" +
+                    "硅基流动、OneAPI 中转，或本地 Ollama / LM Studio。\n" +
+                    "本地连接：模拟器访问电脑用 10.0.2.2，真机与电脑同一 WiFi 填电脑局域网 IP（如 192.168.x.x）；\n" +
+                    "仅本机/局域网允许 http 且无需 Key，外部端点必须是 https 且需要 Key。\n" +
                     "Key 仅保存在本机 DataStore，随卸载清除。",
             )
             Spacer(Modifier.height(12.dp))
@@ -132,7 +136,7 @@ private fun NoteCard(text: String) {
 }
 
 @Composable
-private fun StatusPill(ready: Boolean) {
+private fun StatusPill(ready: Boolean, reason: String?) {
     Row(
         Modifier
             .clip(RoundedCornerShape(20.dp))
@@ -141,7 +145,11 @@ private fun StatusPill(ready: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            if (ready) "● 已配置，可在问题卡片上点「AI 解答」" else "○ 尚未配置完成",
+            when {
+                ready -> "● 已配置，可在问题卡片上点「AI 解答」"
+                reason != null -> "○ $reason"
+                else -> "○ 尚未配置完成"
+            },
             color = if (ready) OkGreen else TextSub,
             fontSize = TextUnit(12f, TextUnitType.Sp),
         )

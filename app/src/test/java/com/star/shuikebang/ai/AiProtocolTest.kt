@@ -72,4 +72,34 @@ class AiProtocolTest {
         ).toString()
         AiProtocol.parseAnswer(resp)
     }
+
+    @Test
+    fun localEndpoint_allowsHttpAndBlankKey() {
+        // 模拟器访问宿主机 / 回环 / 常见局域网段：允许 http 且不需要 Key
+        assertTrue(AiProtocol.isReady("http://10.0.2.2:11434/v1", ""))
+        assertTrue(AiProtocol.isReady("http://127.0.0.1:1234/v1/", ""))
+        assertTrue(AiProtocol.isReady("http://192.168.31.7:11434/v1", ""))
+        assertTrue(AiProtocol.isReady("http://10.8.0.5/v1", " "))
+        assertTrue(AiProtocol.isReady("http://172.16.0.2/v1", ""))
+        assertTrue(AiProtocol.isReady("http://localhost:11434/v1", ""))
+    }
+
+    @Test
+    fun externalHttp_isRejected_httpsNeedsKey() {
+        // 外部地址的明文 HTTP 一律拒绝（即使带 Key）
+        assertFalse(AiProtocol.isReady("http://api.x.com/v1", "sk-1"))
+        // 外部 HTTPS 仍必须有 Key
+        assertFalse(AiProtocol.isReady("https://api.x.com/v1", ""))
+        assertTrue(AiProtocol.isReady("https://api.x.com/v1", "sk-1"))
+    }
+
+    @Test
+    fun isLocalEndpoint_classifiesRanges() {
+        assertTrue(AiProtocol.isLocalEndpoint("http://127.0.0.1"))
+        assertTrue(AiProtocol.isLocalEndpoint("http://192.168.1.1"))
+        assertTrue(AiProtocol.isLocalEndpoint("http://172.20.0.1"))
+        assertFalse(AiProtocol.isLocalEndpoint("http://172.32.0.1")) // 超出 172.16/12
+        assertFalse(AiProtocol.isLocalEndpoint("http://8.8.8.8"))
+        assertFalse(AiProtocol.isLocalEndpoint("https://api.openai.com"))
+    }
 }

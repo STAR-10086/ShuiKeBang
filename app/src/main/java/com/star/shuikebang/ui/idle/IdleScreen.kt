@@ -75,8 +75,12 @@ fun IdleScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val modelReady by produceState(initialValue = false) {
-        value = ModelManager.get(context).currentReadySpecOrNull() != null
+    // 以用户持久化选择的模型为准：就绪状态与首页展示名都反映“选中的那一个”，而不是任意已下载模型
+    val selectedSpec by produceState(initialValue = BuiltinModels.SMALL_BILINGUAL) {
+        value = BuiltinModels.byId(SettingsRepository.get(context).snapshot().selectedModelId)
+    }
+    val modelReady by produceState(initialValue = false, selectedSpec) {
+        value = ModelManager.get(context).isReady(selectedSpec)
     }
     val prefs by produceState<AppSettings?>(initialValue = null) {
         value = SettingsRepository.get(context).snapshot()
@@ -216,13 +220,14 @@ fun IdleScreen(
             )
             Column(Modifier.padding(start = 10.dp).weight(1f)) {
                 Text(
-                    if (modelReady) "识别模型已就绪" else "尚未下载识别模型",
+                    if (modelReady) "识别模型已就绪" else "尚未下载选中的识别模型",
                     color = TextMain,
                     fontSize = TextUnit(14f, TextUnitType.Sp),
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    if (modelReady) BuiltinModels.SMALL_BILINGUAL.displayName else "首次使用需下载，约 50MB（仅下载时联网）",
+                    if (modelReady) selectedSpec.displayName
+                    else "已选「${selectedSpec.displayName}」，约 ${selectedSpec.sizeBytes / 1024 / 1024}MB（仅下载时联网）",
                     color = TextSub,
                     fontSize = TextUnit(11f, TextUnitType.Sp),
                 )

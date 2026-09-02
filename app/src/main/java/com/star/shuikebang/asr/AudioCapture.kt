@@ -18,11 +18,13 @@ class AudioCapture(
     /** 可选的麦克风前级增益（小声放大），作用在转 float 之后、回调之前 */
     private val preamp: AudioPreamp? = null,
     private val onSamples: (FloatArray, Int) -> Unit,
+    /** 采集启动失败 / 运行中 AudioRecord 出错时回调（在采集线程触发，调用方需自行切线程） */
     private val onError: (Throwable) -> Unit = {},
 ) {
     @Volatile
     private var running = false
     private var record: AudioRecord? = null
+    @Volatile
     private var worker: Thread? = null
 
     val isRunning: Boolean get() = running
@@ -35,8 +37,9 @@ class AudioCapture(
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(sampleRate) // 至少 1s 缓冲，防止低端机抖动
+        var rec: AudioRecord? = null
         return try {
-            val rec = AudioRecord(
+            rec = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION, // 语音识别源，系统会做降噪/回声抑制
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
@@ -48,13 +51,20 @@ class AudioCapture(
                 onError(IllegalStateException("AudioRecord 初始化失败（麦克风被占用或权限缺失）"))
                 return false
             }
+            rec.startRecording() // 可能抛异常，必须在赋 running 前/失败时回滚
             record = rec
             running = true
-            rec.startRecording()
             worker = thread(name = "audio-capture", isDaemon = true) { loop() }
             true
         } catch (t: Throwable) {
             Log.e(TAG, "start failed", t)
+            // 关键：startRecording 抛异常时不能留下 running=true 与未释放的 record，
+            // 否则下一次 start 会因 running 直接误判成功（“假录音”）并泄漏麦克风
+            running = false
+            runCatching { rec?.stop() }
+            rec?.release()
+            record = null
+            worker = null
             onError(t)
             false
         }
@@ -74,10 +84,22 @@ class AudioCapture(
                 val out = if (n == frameShorts) floatBuf else floatBuf.copyOf(n)
                 onSamples(out, sampleRate)
             } else if (n == AudioRecord.ERROR_INVALID_OPERATION || n == AudioRecord.ERROR_BAD_VALUE) {
-                onError(IllegalStateException("AudioRecord.read 错误码：$n"))
+                // 运行中读取失败：采集已不可恢复，释放硬件并上报，避免界面停在“正在记录”的假状态
+                abort(IllegalStateException("AudioRecord.read 错误码：$n"))
                 break
             }
         }
+    }
+
+    /** 采集线程内部出错时的自我回收：停硬件、释放、复位标志，再上报一次 */
+    private fun abort(t: Throwable) {
+        running = false
+        runCatching { record?.stop() }
+        record?.release()
+        record = null
+        worker = null
+        Log.e(TAG, "capture aborted", t)
+        onError(t)
     }
 
     fun stop() {

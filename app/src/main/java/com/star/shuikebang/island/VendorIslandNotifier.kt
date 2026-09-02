@@ -66,8 +66,9 @@ class VendorIslandNotifier(private val context: Context) {
     }
 
     fun isSupported(): Boolean = when (vendor) {
-        Vendor.XIAOMI -> isHyperOs3 // 权限运行时再查，不支持机型直接 false
-        Vendor.VIVO -> true         // vivo 无公开能力查询，尝试发送即可
+        // 小米：HyperOS3 且确实查到焦点通知展示授权才算支持，否则应降级到悬浮窗/通知
+        Vendor.XIAOMI -> isHyperOs3 && miCanShowFocus()
+        Vendor.VIVO -> true         // vivo 无公开能力查询，是否真正展示取决于厂商授权（由设置开关默认关闭）
         Vendor.OTHER -> false
     }
 

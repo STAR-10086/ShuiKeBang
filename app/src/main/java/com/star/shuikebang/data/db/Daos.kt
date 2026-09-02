@@ -58,6 +58,10 @@ interface QuestionDao {
     @Query("SELECT COUNT(*) FROM questions WHERE sessionId = :sessionId")
     suspend fun countBySession(sessionId: Long): Int
 
+    /** 按问题 id 反查所属会话 id（点击提问通知跳转用） */
+    @Query("SELECT sessionId FROM questions WHERE id = :questionId LIMIT 1")
+    suspend fun sessionOfQuestion(questionId: Long): Long?
+
     @Query(
         """
         SELECT * FROM questions

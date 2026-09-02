@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -19,7 +20,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +49,25 @@ import kotlinx.coroutines.launch
 fun SessionDetailScreen(
     sessionId: Long,
     onBack: () -> Unit,
+    highlightQuestionId: Long? = null,
     vm: HistoryViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val transcripts by vm.transcripts(sessionId).collectAsStateWithLifecycle()
-    val questions by vm.questions(sessionId).collectAsStateWithLifecycle()
+    // 关键：用 remember(sessionId) 固定两个数据库 Flow，避免每次重组都新建 stateIn 观察者
+    val transcriptsFlow = remember(sessionId) { vm.transcripts(sessionId) }
+    val questionsFlow = remember(sessionId) { vm.questions(sessionId) }
+    val transcripts by transcriptsFlow.collectAsStateWithLifecycle()
+    val questions by questionsFlow.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+
+    // 从提问通知进入：问题列表加载后滚动并定位到对应问题（列表首项是“老师提问”标题）
+    LaunchedEffect(highlightQuestionId, questions.size) {
+        val hq = highlightQuestionId ?: return@LaunchedEffect
+        if (questions.isEmpty()) return@LaunchedEffect
+        val idx = questions.indexOfFirst { it.id == hq }
+        if (idx >= 0) listState.scrollToItem(idx + 1)
+    }
 
     Column(Modifier.fillMaxSize().background(PageBg)) {
         Row(
@@ -73,6 +89,7 @@ fun SessionDetailScreen(
 
         LazyColumn(
             Modifier.weight(1f).padding(horizontal = 16.dp),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (questions.isNotEmpty()) {
@@ -102,17 +119,23 @@ fun SessionDetailScreen(
                 item(key = "t_empty") { Text("暂无转录内容", color = TextFaint, fontSize = TextUnit(12f, TextUnitType.Sp)) }
             }
             items(transcripts, key = { "t_${it.id}" }) { t ->
+                val isMark = t.text.startsWith("★")
                 Column(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(CardWhite)
+                        .background(if (isMark) Brand.copy(alpha = 0.10f) else CardWhite)
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     Text(TimeFmt.stamp(t.ts), color = TextFaint, fontSize = TextUnit(10.5f, TextUnitType.Sp))
                     Text(
                         t.text,
-                        color = if (t.questionId != null) Brand else TextMain,
+                        color = when {
+                            isMark -> Brand
+                            t.questionId != null -> Brand
+                            else -> TextMain
+                        },
+                        fontWeight = if (isMark) FontWeight.SemiBold else FontWeight.Normal,
                         fontSize = TextUnit(14f, TextUnitType.Sp),
                         modifier = Modifier.padding(top = 2.dp),
                     )
