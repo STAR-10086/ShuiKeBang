@@ -17,8 +17,8 @@ data class AppSettings(
     val vibrateOnQuestion: Boolean = true,
     /** 提问检测灵敏度 */
     val sensitivity: DetectSensitivity = DetectSensitivity.NORMAL,
-    /** 是否启用 L2 自绘悬浮胶囊（厂商岛不可用时），默认关闭 */
-    val overlayCapsule: Boolean = false,
+    /** 是否启用 L2 自绘悬浮窗（可拖动/展开/操作）；默认开启，未授予悬浮窗权限时自动降级为通知 */
+    val overlayCapsule: Boolean = true,
     /** 是否把 L1「可能被提问」也沉淀进提问列表，默认开启 */
     val showL1Suspect: Boolean = true,
     /** 模型下载源 id，见 [com.star.shuikebang.asr.DownloadSource] */
@@ -41,7 +41,7 @@ class SettingsRepository private constructor(context: Context) {
             sensitivity = runCatching {
                 DetectSensitivity.valueOf(p[K_SENSITIVITY] ?: DetectSensitivity.NORMAL.name)
             }.getOrDefault(DetectSensitivity.NORMAL),
-            overlayCapsule = p[K_OVERLAY] ?: false,
+            overlayCapsule = p[K_OVERLAY] ?: true,
             showL1Suspect = p[K_SHOW_L1] ?: true,
             downloadSourceId = p[K_SOURCE] ?: "auto",
             micGainId = p[K_MIC_GAIN] ?: MicGainMode.AUTO.id,

@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.text.font.FontWeight
@@ -32,8 +33,13 @@ fun RecStatusBar(
     modifier: Modifier = Modifier,
     preparing: Boolean = false,
     prepareMsg: String? = null,
+    paused: Boolean = false,
 ) {
-    val bg = if (preparing) Brand else RecordRed
+    val bg = when {
+        preparing -> Brand
+        paused -> Color(0xFFF0A830)
+        else -> RecordRed
+    }
     Row(
         modifier
             .fillMaxWidth()
@@ -59,7 +65,7 @@ fun RecStatusBar(
             } else {
                 PulseDot(CardWhite, 8)
                 Text(
-                    "  正在记录中",
+                    if (paused) "  已暂停" else "  正在记录中",
                     color = CardWhite,
                     fontSize = TextUnit(15f, TextUnitType.Sp),
                     fontWeight = FontWeight.SemiBold,
@@ -68,7 +74,7 @@ fun RecStatusBar(
         }
         if (!preparing) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                WaveBars(CardWhite)
+                if (!paused) WaveBars(CardWhite)
                 Text(
                     "  ${TimeFmt.duration(durationSec)}",
                     color = CardWhite,

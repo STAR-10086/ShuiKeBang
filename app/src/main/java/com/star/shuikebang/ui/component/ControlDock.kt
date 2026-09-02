@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -41,6 +43,8 @@ fun ControlDock(
     onAskAi: () -> Unit,
     onMark: () -> Unit,
     modifier: Modifier = Modifier,
+    paused: Boolean = false,
+    onTogglePause: () -> Unit = {},
 ) {
     Row(
         modifier
@@ -49,6 +53,10 @@ fun ControlDock(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        DockItem(
+            if (paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
+            if (paused) "继续" else "暂停", BrandSoft, TextMain, onTogglePause,
+        )
         DockItem(Icons.Outlined.Stop, "停止", RecordRed, CardWhite, onStop, primary = true)
         DockItem(Icons.Outlined.ContentCopy, "复制", BrandSoft, TextMain, onCopy)
         DockItem(Icons.Outlined.AutoAwesome, "问AI", BrandSoft, TextMain, onAskAi)

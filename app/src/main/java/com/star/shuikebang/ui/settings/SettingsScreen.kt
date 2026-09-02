@@ -119,8 +119,8 @@ fun SettingsScreen(
                 )
                 CellDivider()
                 SwitchRow(
-                    title = "悬浮状态胶囊",
-                    subtitle = "小米/vivo 原生岛不可用时，在屏幕顶部悬浮显示录制状态（需悬浮窗权限）",
+                    title = "悬浮控制窗",
+                    subtitle = "切到其他应用也能悬浮显示状态与最近提问，可拖动展开、暂停/继续/结束（需悬浮窗权限）",
                     checked = s.overlayCapsule,
                     onCheckedChange = { want ->
                         if (want && !AndroidSettings.canDrawOverlays(context)) {

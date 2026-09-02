@@ -47,6 +47,7 @@ class RecordService : LifecycleService() {
     private var capture: AudioCapture? = null
     private var preamp: AudioPreamp? = null
     private var spec: AsrModelSpec? = null
+    private var sessionTitle: String = ""
     private var tickerJob: Job? = null
     private var startJob: Job? = null
     private lateinit var settingsRepo: SettingsRepository
@@ -90,6 +91,8 @@ class RecordService : LifecycleService() {
                 val modelId = intent.getStringExtra(EXTRA_MODEL_ID) ?: BuiltinModels.RECOMMENDED_ID
                 startRecording(modelId)
             }
+            ACTION_PAUSE -> pauseRecording()
+            ACTION_RESUME -> resumeRecording()
             ACTION_STOP -> stopRecording()
         }
         return START_STICKY
@@ -147,8 +150,10 @@ class RecordService : LifecycleService() {
                         partial = "", questions = emptyList(), engineReady = true,
                     )
                 }
+                sessionTitle = title
                 island.onStart(title)
-                startTicker(title)
+                if (island.overlayMissingPermission()) hintOverlayPermission()
+                startTicker()
                 startCapture(eng)
             } catch (t: Throwable) {
                 if (t is kotlinx.coroutines.CancellationException) throw t
@@ -165,8 +170,10 @@ class RecordService : LifecycleService() {
     }
 
     private fun startCapture(eng: SherpaStreamEngine) {
-        val amp = AudioPreamp(MicGainMode.of(cfg.micGainId)).also { it.reset() }
-        preamp = amp
+        // 暂停后继续时复用已有前级（保留 AGC 状态）；首次才新建
+        val amp = preamp ?: AudioPreamp(MicGainMode.of(cfg.micGainId)).also {
+            it.reset(); preamp = it
+        }
         val cap = AudioCapture(preamp = amp, onSamples = { samples, sr ->
             eng.accept(samples, sr, object : StreamAsrCallback {
                 override fun onPartial(text: String) {
@@ -306,16 +313,58 @@ class RecordService : LifecycleService() {
 
     // ---------------- 计时 ----------------
 
-    private fun startTicker(title: String) {
+    private fun startTicker() {
         tickerJob?.cancel()
         tickerJob = lifecycleScope.launch {
-            val start = RecSession.state.value.startedAt
+            // 只在运行中每秒 +1：暂停时取消本协程即冻结计时，继续时重启接着累加，
+            // 因此 durationSec 天然等于“真正在录音的秒数”，不把暂停时长算进去。
             while (true) {
                 delay(1000)
-                val sec = ((System.currentTimeMillis() - start) / 1000).toInt()
-                RecSession.update { it.copy(durationSec = sec) }
-                island.onTick(sec, title)
+                RecSession.update { it.copy(durationSec = it.durationSec + 1) }
+                val sec = RecSession.state.value.durationSec
+                island.onTick(sec, sessionTitle)
             }
+        }
+    }
+
+    private fun hintOverlayPermission() {
+        android.os.Handler(mainLooper).post {
+            android.widget.Toast.makeText(
+                this,
+                "未授予悬浮窗权限，暂用通知控制；可在「设置」开启悬浮窗",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    // ---------------- 暂停 / 继续（会话保留，采集停止，可恢复） ----------------
+
+    private fun pauseRecording() {
+        val st = RecSession.state.value
+        if (!st.recording || st.paused || st.starting) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            // 停采集（保留引擎/会话/前级），冻结计时；在途待定提问立即确认，避免悬而不决
+            capture?.stop(); capture = null
+            tickerJob?.cancel()
+            val sid = st.sessionId
+            val tail = lifecycleScope.launch(gateDispatcher) {
+                if (pending != null && sid != null) confirmPending(sid)
+            }
+            trackWrite(tail)
+            RecSession.update { it.copy(paused = true) }
+            island.onPause()
+        }
+    }
+
+    private fun resumeRecording() {
+        val st = RecSession.state.value
+        val eng = engine
+        if (!st.recording || !st.paused || eng == null) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            RecSession.update { it.copy(paused = false) }
+            island.onResume()
+            startCapture(eng)          // 重建麦克风采集，继续喂同一个识别引擎
+            if (capture != null) startTicker()
         }
     }
 
@@ -361,7 +410,10 @@ class RecordService : LifecycleService() {
         engine?.release(); engine = null
         island.onStop()
         RecSession.update {
-            it.copy(recording = false, starting = false, engineReady = false, prepareMsg = null)
+            it.copy(
+                recording = false, starting = false, paused = false,
+                engineReady = false, prepareMsg = null,
+            )
         }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -378,7 +430,9 @@ class RecordService : LifecycleService() {
         private const val TAG = "RecordService"
         private const val FGS_ID = 1001
         private const val ACTION_START = "com.star.shuikebang.START"
-        private const val ACTION_STOP = "com.star.shuikebang.STOP"
+        const val ACTION_STOP = "com.star.shuikebang.STOP"
+        const val ACTION_PAUSE = "com.star.shuikebang.PAUSE"
+        const val ACTION_RESUME = "com.star.shuikebang.RESUME"
         private const val EXTRA_MODEL_ID = "model_id"
 
         /** L2 提问二次确认窗口：真实提问老师会停顿等学生，延迟 2.2s 再提醒不影响体验，却能拦住自问自答 */
@@ -394,6 +448,16 @@ class RecordService : LifecycleService() {
 
         fun stop(context: Context) {
             val intent = Intent(context, RecordService::class.java).apply { action = ACTION_STOP }
+            context.startService(intent)
+        }
+
+        fun pause(context: Context) {
+            val intent = Intent(context, RecordService::class.java).apply { action = ACTION_PAUSE }
+            context.startService(intent)
+        }
+
+        fun resume(context: Context) {
+            val intent = Intent(context, RecordService::class.java).apply { action = ACTION_RESUME }
             context.startService(intent)
         }
     }

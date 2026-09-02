@@ -282,3 +282,48 @@
 - 真机重点：①AUTO 增益在不同距离/教室的实际识别率与是否抬底噪；②2.2s 延迟震动是否自然、自问自答撤销是否准确，
   不准就调 `SelfAnswerDetector` 的 cue 词表 / `RELATED_THRESHOLD` / `CONFIRM_DELAY_MS`。
 - 本轮未发版；与第四轮加固一起积累在 main，验证 OK 后可打 v0.2.0（三架构）。
+
+
+---
+
+## 12. 第六轮：可交互前台通知 + 可操作悬浮窗 + 暂停/继续
+
+### 12.1 要解决的问题
+此前 L3 通知是“假通知”——只有一条“正在记录课堂”，不能操作、看不到问题；L2 悬浮胶囊只读、
+点一下只回 App；且没有暂停能力，切到别的应用就无法控制录音。
+
+### 12.2 暂停 / 继续（RecordService）
+- `RecUiState` 新增 `paused`；companion 暴露 public `ACTION_PAUSE/ACTION_RESUME/ACTION_STOP`
+  与静态 `pause(context)/resume(context)`，`onStartCommand` 分发。
+- 暂停：`capture.stop()/=null`（**保留 engine / session / preamp**）、取消 ticker、在途 pending 立即确认、
+  `paused=true`、`island.onPause()`；继续：重建 `AudioCapture`（复用同一 engine 与 preamp）、重启 ticker。
+- 计时由“wallclock(now-startedAt)”改为 **ticker 每秒 durationSec+1**：暂停取消 ticker 即冻结，
+  继续接着累加，durationSec 天然等于真正录音秒数；`sessionTitle` 提为字段供重启 ticker 使用。
+- 录音前台服务类型始终是 microphone；暂停期间不采集但仍在前台，合法。
+
+### 12.3 可交互通知（FgsNotifier 重写）
+- `build(sec, paused, question)`：标题随 记录中/已暂停 + 计时切换；正文优先显示最近一条提问，
+  `BigTextStyle` 展开看全；`addAction` 暂停↔继续（ic_ntf_pause/ic_ntf_play）、结束并保存（ic_ntf_stop）。
+- Action 用 `PendingIntent.getForegroundService` 回送 RecordService action（服务已在前台，不受后台启动限制）；
+  缓存 latestQuestion，refresh 时传 null 保留。新增 3 个白色 vector：ic_ntf_pause/play/stop。
+
+### 12.4 可操作悬浮窗（OverlayCapsule 重写）
+- 单 window 根布局：折叠行（红点+状态+计时）+ 展开区（最近提问 + 暂停/继续、结束、打开、收起）。
+- **可拖动**：root OnTouch 用 scaledTouchSlop 区分点击与拖动，移动改 LayoutParams.x/y（gravity TOP|CENTER_HORIZONTAL），
+  抬手未拖动则展开/收起；按钮是可点击子 View，自行消费事件、不会被拖动吞掉。
+- 操作直接 `startForegroundService(RecordService action)`，打开应用跳 MainActivity；`setPaused/flashQuestion/updateTimer`
+  由 StatusIsland 驱动，全部 `view.post` 回主线程。圆角深色背景改用 GradientDrawable（不再用系统 dialog frame）。
+- `StatusIsland.onStart` 改为只要 overlayEnabled 就 show（不再因 useVendorIsland 互斥）：小米焦点通知未授权时
+  原生岛静默失败，悬浮窗仍能兜底；新增 `overlayMissingPermission()`，想开却没权限时 Service 弹一次 Toast 引导。
+
+### 12.5 App 内与设置
+- ControlDock 新增“暂停/继续”圆形按钮（Outlined.Pause/PlayArrow），RecordScreen 用 ui.paused 接线；
+  RecStatusBar 暂停时变橙(#F0A830)、文案“已暂停”、隐藏波形。
+- `AppSettings.overlayCapsule` 默认改为 **true**（data class 默认与 DataStore `?: true` 同步）；
+  设置项改名“悬浮控制窗”并更新说明。
+
+### 12.6 验证 / 待真机
+- 本地镜像源：`:app:testDebugUnitTest`（42, 0 失败）、`:app:assembleDebug`、`:app:lintDebug`（0 error）全过。
+- 待真机：①通知上暂停/继续/结束在小米/vivo 各类 ROM 是否都显示 action（厂商可能折叠通知 action）；
+  ②悬浮窗拖动手感、展开宽度与不挡操作、TYPE_APPLICATION_OVERLAY 在国产 ROM 的权限与保活；
+  ③暂停数分钟后继续，识别与计时是否正确、麦克风不会被其他应用抢占后无法恢复。

@@ -102,6 +102,7 @@ fun RecordScreen(onStopped: () -> Unit) {
             durationSec = ui.durationSec,
             preparing = preparing,
             prepareMsg = ui.prepareMsg,
+            paused = ui.paused,
         )
 
         Box(Modifier.weight(1f).padding(top = 12.dp)) {
@@ -140,6 +141,10 @@ fun RecordScreen(onStopped: () -> Unit) {
         }
 
         ControlDock(
+            paused = ui.paused,
+            onTogglePause = {
+                if (ui.paused) RecordService.resume(context) else RecordService.pause(context)
+            },
             onStop = {
                 RecordService.stop(context)
                 onStopped()

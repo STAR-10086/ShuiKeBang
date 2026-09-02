@@ -20,6 +20,8 @@ data class UtteranceLine(
 data class RecUiState(
     val recording: Boolean = false,
     val starting: Boolean = false,
+    /** 暂停态：采集停止但会话保留，可继续；计时与识别都暂停 */
+    val paused: Boolean = false,
     /** 引擎/模型准备阶段的提示（如"正在下载识别模型 45%"），recording=true 后清空 */
     val prepareMsg: String? = null,
     val sessionId: Long? = null,
