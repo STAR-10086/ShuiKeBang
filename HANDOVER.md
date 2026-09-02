@@ -402,3 +402,30 @@ L2 悬浮窗需要“显示在其他应用上层”授权（本轮已做首次�
 - workflow release job 的 softprops/action-gh-release 增加 prerelease 动态判定（tag 名含 beta/alpha/rc 即标预发行）并更新 release body；
 - 本地 `:app:testDebugUnitTest / :app:lintDebug / :app:assembleRelease -PsplitAbi` 全过后提交推送 main，CI verify 绿再打 `v0.2.0-beta` 触发三架构包，
   gh 确认 Release 被勾选 Pre-release。
+
+
+## 14. 第八轮：静态审查 11 项修复（commit 9a296a6，本地已提交、**未 push**，等用户发话）
+
+本轮针对用户贴来的 3 高 + 8 中审查逐项修复。本地 `:app:testDebugUnitTest`（53 用例全过）、`:app:lintDebug`（无 error）、`:app:assembleRelease -PsplitAbi`（arm64 12.73MB / v7a 11.9MB / universal 23.03MB，均不含模型）全绿。
+
+### 14.1 三项高优先
+1. **模型选择真正生效**：`SettingsRepository` 新增持久化 `selectedModelId`（默认 RECOMMENDED_ID）；模型页 VM 的 selectedId 以它为准、select 时写回；`AppNav` 开始录音时只认选中模型——就绪才 `RecordService.start(context, spec.id)` 并跳录音页，未就绪跳模型页（不再“下了 25M 又自动下 50M”）；`IdleScreen` 就绪状态与模型名都显示选中的那个。
+2. **录音控制串行状态机**：`RecordService` 新增 `controlDispatcher = Dispatchers.IO.limitedParallelism(1)`，开始/暂停/继续/停止/标记/采集异常全部排队；`@Volatile stopping` + `requestStop()` 保证停止幂等（通知、悬浮窗、页面同时点也只停一次）；停止顺序=先停采集 join → flush → joinAll 入库协程 → 释放引擎，杜绝 accept/flush 并发与 delay(150) 丢句。
+3. **AudioCapture 异常治理**：`startRecording()` 抛错时回滚 running 并 stop/release 麦克风；采集线程 read 致命错误时自回收并回调 `onError` → Service `onCaptureFailed` → `requestStop(错误文案)` 受控中止，不再“假录音”。
+
+### 14.2 八项中优先
+4. 本地 AI 端点：新增 `res/xml/network_security_config.xml`（Manifest 挂载）；`AiProtocol` 新增 hostOf/isLocalEndpoint（localhost/回环/10/172.16-31/192.168/169.254/100.64-127/10.0.2.2/IPv6 本地）与 notReadyReason——**仅本机/局域网允许 http 且可空 Key，外部强制 https + Key**；`AiClient` 空 Key 不发 Authorization；AI 设置页加 10.0.2.2 与 LM Studio 预设、Key 可留空提示、未就绪原因。
+5. 历史时长：`ClassRepository.finishSession(..., actualDurationSec)` 用 `RecSession.durationSec` 真实录音秒数，暂停时间不再计入。
+6. 提问通知跳转：MainActivity 改 singleTop + `onNewIntent` + 可观察 pendingQuestionId；`Routes.session(id, highlightQuestionId)` 加可选 `?hq=` 参数；AppNav 用新增 `QuestionDao.sessionOfQuestion` 反查课堂并导航，详情页 `LaunchedEffect` 滚动定位该问题。
+7. 真断点续传：`ModelManager` 不再在 ensureModel/换源/catch 时盲删 `.part`，新增 partLooksComplete（已下满才删），中断后按已有长度发 Range 续传。
+8. 模型可恢复：模型页 Ready 状态加“重新下载 / 删除模型”（删除有二次确认），VM 加 redownload/deleteSelected，损坏后无需清数据。
+9. 状态岛：`vendorIsland` 持久化默认 **false**（L1 胶囊需厂商授权，默认不假设支持）；`StatusIsland` 悬浮窗更新与厂商岛解耦（独立 if，不再卡 00:00）；小米 isSupported 加 `miCanShowFocus` 展示授权校验，vivo 不再无条件支持。
+10. 标记/重命名补齐：`RecordService.mark()`（ACTION_MARK，MARK_TEXT="★ 标记重点"、LEVEL_MARK=3）把标记作为 transcript 落库，RecordScreen 改调它并用琥珀色高亮标记行；历史列表每行加编辑图标 + AlertDialog 重命名（调已有 vm.rename）。
+11. Flow 泄漏：`SessionDetailScreen` 用 `remember(sessionId){ vm.transcripts/questions(...) }` 固定 Flow，重组不再新建 stateIn。
+
+### 14.3 给下一轮的提示
+- **未 push、未发版**：用户约定“本地测试通过后由他发话再上传”。push 前记得 git/gh 命令前 `$env:HTTPS_PROXY=$env:HTTP_PROXY='http://127.0.0.1:7897'`；远端 CI 只用官方源，勿加阿里云镜像。
+- 若发 v0.2.1，versionCode 需 +1（当前 =2 / versionName=0.2.0-beta）；release 三架构 workflow 已就绪。
+- 本轮把 `gradle.properties` 里 Android Studio 自动加的 `org.gradle.tooling.parallel=true` 主动还原了（与修复无关、不进提交）；AS 可能再次自动写入，提交前留意 `git status`。
+- 新增/改动持久化字段后老用户升级：selectedModelId 缺省回退 RECOMMENDED_ID、vendorIsland 缺省 false，均向后兼容，无需 Room 迁移（DataStore 层）。
+- 仍只能真机验证：本地 Ollama 连通（模拟器 10.0.2.2 / 真机局域网 IP）、采集 onError 路径、通知 action 与厂商岛在小米/vivo 的折叠、标记落库后历史可见、通知点击定位。
