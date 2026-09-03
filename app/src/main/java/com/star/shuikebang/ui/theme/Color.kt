@@ -2,7 +2,7 @@ package com.star.shuikebang.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// 设计令牌（与 design/ui-mockup.html 保持一致）
+// 全局设计令牌（配色）
 val Brand = Color(0xFF2E6BE6)
 val BrandDeep = Color(0xFF1F54C8)
 val BrandSoft = Color(0xFFEAF1FF)

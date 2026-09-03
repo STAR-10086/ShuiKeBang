@@ -1,6 +1,6 @@
 # 交接文档（给下一个 Agent）
 
-> 最后更新：2026-09-01。本文件是「水课帮 Android」开发接力的唯一权威上下文，读完它 + README + DEV_PLAN 即可无缝接手。用户本机环境为 Windows，执行模式为按需确认、无沙箱。
+> 最后更新：2026-09-03。本文件是「水课帮 Android」开发接力的权威上下文，读完它 + README 即可无缝接手。开发机为 Windows，执行模式为按需确认、无沙箱。
 
 ## 0. 一句话现状
 
@@ -11,11 +11,11 @@
 
 ## 1. 本机环境（已核实，直接用）
 
-- JDK：`E:\games\mc\zulu21.28.85-ca-jdk21.0.0-win_x64`（JDK21，JAVA_HOME 通常已配）
+- JDK：JDK 17（AGP 要求）；本机 Gradle 用 JDK 21，JAVA_HOME 指向本机 JDK 安装目录即可。
 - Android SDK：`D:\apps\AndroidSDK`（platforms android-34、build-tools 34.0.0、platform-tools 齐全）；`local.properties` 已写 `sdk.dir=D\:\\apps\\AndroidSDK`（该文件被 gitignore，clone 后需重建）
-- 代理：Clash 类本地代理 `http://127.0.0.1:7897`，访问 GitHub/JitPack/HuggingFace 走它；**国内直连测试要显式 `curl --noproxy '*'`**。`gradle.properties` 已写入该代理，不用可删该段。
+- 代理：访问 GitHub/JitPack/HuggingFace 走本机 HTTP 代理（地址端口以本机代理软件为准）；国内直连测试要显式 `curl --noproxy '*'`。仓库内 gradle.properties 不写代理。
 - Gradle：仓库自带 wrapper 8.10.2（distribution 走腾讯云镜像）；本机无独立 gradle/Android Studio，全部命令行构建。
-- git 2.50.1，全局用户 STAR-10086 / hejunxing2006@gmail.com；**`gh` CLI 已登录 STAR-10086（token 含 repo scope，git 走 ssh）**，对 GitHub 写操作优先用 `gh`，命令前设 `$env:HTTPS_PROXY='http://127.0.0.1:7897'`。
+- git / `gh` CLI 已登录并配置好仓库账号（remote 为 HTTPS，SSH 22 端口不通，勿改回）；对 GitHub 写操作用 git/gh，命令前在进程内设置本机 HTTP 代理环境变量 HTTPS_PROXY/HTTP_PROXY。
 - PowerShell 注意：不要用 `&&`；长命令前台 15s 会自动转后台，用返回的 task id + TaskOutput 取结果。
 
 ### 构建命令（在 D:\Develop\ShuiKeBang 下）
@@ -37,7 +37,7 @@
   - 文件本地位置：`D:\Develop\ShuiKeBang\dist-models\`（含两个 zip、两个解压目录、MODELS_MANIFEST.md，该目录不进 git）。
   - 建 Release 命令示例：
     ```powershell
-    $env:HTTPS_PROXY='http://127.0.0.1:7897'
+    $env:HTTPS_PROXY='http://127.0.0.1:<代理端口>'
     gh release create asr-models-v1 `
       D:\Develop\ShuiKeBang\dist-models\small-bilingual-zh-en-int8.zip `
       D:\Develop\ShuiKeBang\dist-models\zh-14m-int8.zip `
@@ -61,7 +61,7 @@
 | `service/RecSession.kt` | 全局录制状态单例 StateFlow + 提问事件 SharedFlow；RecUiState 含 recording/starting/prepareMsg/error 等 |
 | `service/RecordService.kt` | LifecycleService，串联：前台麦克风服务→(按需下载模型,进度桥接到 prepareMsg)→引擎 init/start→建会话→采集→检测→入库→震动→状态岛。startJob 可在停止时取消；失败写 error 并 stopSelfClean |
 | `island/` | 四级状态展示 StatusIsland 门面：L1 小米超级岛/vivo 原子岛（纯本地通知无 Push，VendorIslandNotifier，**字段按公开文档写、未经真机校准**）→L2 OverlayCapsule 悬浮胶囊（默认关）→L3 FgsNotifier 常驻通知→L4 应用内状态条 |
-| `ui/` | Compose：idle 待机首页（呼吸大按钮）/model 模型下载页/record 录制页/history 列表+详情/component 通用组件/theme 设计令牌。设计稿在 design/ui-mockup.html（用户已截图确认） |
+| `ui/` | Compose：idle 待机首页（呼吸大按钮）/model 模型下载页/record 录制页/history 列表+详情/component 通用组件/theme 设计令牌。视觉风格已经用户截图确认 |
 | `perm/ feedback/ util/` | 权限与电池优化引导、震动、时间格式、剪贴板 |
 
 ## 4. 本轮修复内容（模型 + 录制链路）
@@ -87,7 +87,7 @@
 > 前提：用户要先在真机装第二轮的 release APK 自测；他确认 OK 后才做下面的提交/发版。
 
 1. 复跑 `:app:assembleDebug :app:testDebugUnitTest` 与 `:app:assembleRelease` 确认绿（第二轮本地已通过，提交前再确认一次）。
-2. 提交第二轮改动并推送（remote 已配为 HTTPS + gh 凭据，推送前 `$env:HTTPS_PROXY='http://127.0.0.1:7897'`；SSH 22 端口在本机不通，别改回 ssh）：
+2. 提交第二轮改动并推送（remote 已配为 HTTPS + gh 凭据，推送前 `$env:HTTPS_PROXY='http://127.0.0.1:<代理端口>'`；SSH 22 端口在本机不通，别改回 ssh）：
    ```powershell
    cd D:\Develop\ShuiKeBang
    git add -A
@@ -145,9 +145,9 @@
   runner 访问会 HTTP 502，且 Gradle 对 5xx 不保证回退，曾导致 CI 连挂）。用户明确要求本地也走官方源。
 - pluginManagement 保留 `resolutionStrategy.eachPlugin` 把 KSP 插件映射到真实构件
   `com.google.devtools.ksp:symbol-processing-gradle-plugin:<ver>`（全新环境 KSP plugin marker 偶发解析不到，保留勿删）。
-- **代理只在用户全局 `C:\Users\STAR\.gradle\gradle.properties`**（127.0.0.1:7897，nonProxyHosts 含国内镜像）；
+- **代理只在用户全局 `~/.gradle/gradle.properties`**（本机代理，nonProxyHosts 含国内镜像）；
   仓库内 gradle.properties **不含代理**（否则云端 CI 直接失败）。
-- git/gh 命令前需进程内 `$env:HTTPS_PROXY=$env:HTTP_PROXY='http://127.0.0.1:7897'`；remote 是 HTTPS（SSH 22 不通，勿改回）。
+- git/gh 命令前需进程内 `$env:HTTPS_PROXY=$env:HTTP_PROXY='http://127.0.0.1:<代理端口>'`；remote 是 HTTPS（SSH 22 不通，勿改回）。
   gh 已登录 STAR-10086，scopes 含 workflow（曾因缺 workflow scope 用 `gh auth refresh -s workflow` device 授权补齐）。
 
 ### 9.3 提问小模型（极小、纯本地、非大模型）
@@ -239,11 +239,11 @@
 
 ### 11.1 本地走镜像、远端走官方（关键，解决本机无法编译）
 - 背景：当前 Clash 节点连不上 `dl.google.com`，而 AGP/AndroidX 只在该域名，本地官方源+代理编译失败。
-- 方案：在**用户全局** `C:\Users\STAR\.gradle\init.d\local-mirrors.gradle`（不进任何仓库、CI 读不到）
+- 方案：在**用户全局** `~/.gradle/init.d/local-mirrors.gradle`（不进任何仓库、CI 读不到）
   用 `settingsEvaluated` 把 settings 层的 pluginManagement / dependencyResolutionManagement 仓库列表
   `clear()` 后换成阿里云镜像（gradle-plugin / google / public / central）+ JitPack；**不新增 project 级仓库**，
   因此不触发 `FAIL_ON_PROJECT_REPOS`。仓库 `settings.gradle.kts` 保持纯官方源不变。
-- 全局 `~/.gradle/gradle.properties` 的 7897 代理保留，且 `nonProxyHosts` 已含 `maven.aliyun.com`（镜像直连、JitPack 走代理）。
+- 全局 `~/.gradle/gradle.properties` 的本机代理保留，且 `nonProxyHosts` 已含 `maven.aliyun.com`（镜像直连、JitPack 走代理）。
 - 注意 init 脚本是 **Groovy（.gradle）**，变量用 `def` 不是 `val`（踩过一次编译错）。
 - 结果：本地 `:app:testDebugUnitTest / :app:assembleDebug / :app:lintDebug` 全部成功，lint 0 error；
   debug APK 约 44MB（含全 ABI 且未裁剪，正常，release split 后 arm 包约 11–12MB）。
@@ -424,28 +424,31 @@ L2 悬浮窗需要“显示在其他应用上层”授权（本轮已做首次�
 11. Flow 泄漏：`SessionDetailScreen` 用 `remember(sessionId){ vm.transcripts/questions(...) }` 固定 Flow，重组不再新建 stateIn。
 
 ### 14.3 给下一轮的提示
-- **未 push、未发版**：用户约定“本地测试通过后由他发话再上传”。push 前记得 git/gh 命令前 `$env:HTTPS_PROXY=$env:HTTP_PROXY='http://127.0.0.1:7897'`；远端 CI 只用官方源，勿加阿里云镜像。
+- **未 push、未发版**：用户约定“本地测试通过后由他发话再上传”。push 前记得 git/gh 命令前 `$env:HTTPS_PROXY=$env:HTTP_PROXY='http://127.0.0.1:<代理端口>'`；远端 CI 只用官方源，勿加阿里云镜像。
 - 若发 v0.2.1，versionCode 需 +1（当前 =2 / versionName=0.2.0-beta）；release 三架构 workflow 已就绪。
 - 本轮把 `gradle.properties` 里 Android Studio 自动加的 `org.gradle.tooling.parallel=true` 主动还原了（与修复无关、不进提交）；AS 可能再次自动写入，提交前留意 `git status`。
 - 新增/改动持久化字段后老用户升级：selectedModelId 缺省回退 RECOMMENDED_ID、vendorIsland 缺省 false，均向后兼容，无需 Room 迁移（DataStore 层）。
 - 仍只能真机验证：本地 Ollama 连通（模拟器 10.0.2.2 / 真机局域网 IP）、采集 onError 路径、通知 action 与厂商岛在小米/vivo 的折叠、标记落库后历史可见、通知点击定位。
 
 
-## 15. 第九轮：自有签名正式落地 + v0.2.1 + CWE-927 核查（本轮，进行到 push/tag）
+## 15. 第九轮：自有签名正式落地 + v0.2.1 发布 + CWE-927 修复 + 仓库清理
 
 ### 15.1 自有签名（用户提供 keystore，以后所有 release 都用它）
-- keystore：`D:\Develop\STAR的apk签名\my-release.jks`（PKCS12，普通连字符；别名 **key0**；store/key 密码相同，由用户掌握、不写进仓库）。证书 SHA-256 指纹 `A2:0C:58:4D:20:DB:5B:24:26:26:D5:AD:6C:52:0B:0D:12:7F:2E:98:82:BD:C9:AE:62:2C:9E:5E:10:ED:09:37`。同目录 `jks_base64.txt` 已验证与 jks 字节一致。
+- keystore（.jks）、store/key 密码、别名、证书指纹均由用户在本机自行保管，**不写进仓库、不写进本文档**；`local.properties` 用正斜杠绝对路径引用该 jks 即可（路径可含中文，构建脚本以 UTF-8 读取）。
 - **本机**：`local.properties`（已 gitignore）写了 4 个 `RELEASE_*`，`RELEASE_STORE_FILE` 用正斜杠中文绝对路径。关键修复：`app/build.gradle.kts` 改为 `InputStreamReader(FileInputStream, UTF-8)` 读 local.properties——否则 Java Properties 默认 ISO-8859-1 会把中文密钥目录读乱导致找不到文件。
 - **CI**：用户已在仓库 Settings→Secrets→Actions 配好 `KEYSTORE_B64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD`。`.github/workflows/android.yml` 的 **release job** 新增 “Decode release keystore”（base64 -d 成 `ci-release.jks` 并用 keytool 自检），构建步骤用 env 把它们映射成 build.gradle 认的 `RELEASE_STORE_FILE=ci-release.jks / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD`。verify job 仍打 debug、不需要密钥。
-- 本地 `:app:assembleRelease -PsplitAbi` 三包用 apksigner 校验：签名者指纹与 key0 一致、三个 verify 退出码均 0。
+- 本地 `:app:assembleRelease -PsplitAbi` 三包用 apksigner 校验：签名者为用户自有证书、三个 verify 退出码均 0。
 - 版本：versionCode 2→**3**、versionName 0.2.0-beta→**0.2.1**；tag 名不含 beta，workflow 的 prerelease 表达式判定为**正式版**。
 
 ### 15.2 CWE-927 隐式 PendingIntent（用户给了 VendorIslandNotifier 190/236、FgsNotifier 103）
-- 结论：**当前 main 代码已合规，无需改 Kotlin**。全工程仅 3 个 PendingIntent 构造点——FgsNotifier.contentIntent/controlIntent、VendorIslandNotifier.tapIntent，全部是显式 `Intent(context, Xxx::class.java)` 且 flag 含 `FLAG_IMMUTABLE`（配 UPDATE_CURRENT 以便通知刷新，这是可交互通知的标准写法，不要机械换成 ONE_SHOT，否则刷新后按钮会失效）。
-- 用户引用的行号在远端 HEAD(8f9e2c1) 上已是 nm.notify/.build，并非 PendingIntent；那 3 条 CodeQL High 来自更早的 v0.1.0 旧版（`git log -S "Intent()"` 仅初始提交 c3ab418 出现过空构造）。**push 本轮代码触发 CodeQL 重扫 HEAD 后即应关闭**，需在 Security→Code scanning 确认 3 条变为 Closed。
-- OverlayCapsule/RecordService 里的 `Intent(context, RecordService::class.java)` 是直接 startForegroundService、不经过 PendingIntent，CodeQL 不报；同样已是显式。
+- **根因（下载 SARIF 看 codeFlow 才定位）**：CodeQL 的 java/android/implicit-pendingintents 对 Kotlin 两参构造 `Intent(context, Xxx::class.java)` **没有识别为显式 component**（数据流从 `new Intent` 起就被标 `<implicit>`），sink 报在 nm.notify / setContentIntent 行，所以告警行号看起来不是 PendingIntent 创建处。
+- **修复**：给 3 个 PendingIntent 用的 Intent 在显式 class 之外再显式 `setPackage(context.packageName)`（FgsNotifier.contentIntent/controlIntent、VendorIslandNotifier.tapIntent），这是 CodeQL 明确建模的“锁定本应用、不发给第三方”消除条件。flag 保持 `FLAG_IMMUTABLE or FLAG_UPDATE_CURRENT`（可刷新通知需要 UPDATE_CURRENT，不要换 ONE_SHOT，否则刷新后按钮失效）。
+- OverlayCapsule/RecordService 里的 Intent 直接 startForegroundService、不经过 PendingIntent，CodeQL 不报，无需改。
+- 教训：判断这类告警要下 SARIF 看 codeFlow，不能只凭“代码里写了显式 class”；改完 push 触发重扫，在 Security→Code scanning 确认 3 条变 Closed。
 
 ### 15.3 发版动作与回滚
 - 提交内容：app/build.gradle.kts（UTF-8 读取+版本号）、.github/workflows/android.yml（解码 keystore+签名 env+v0.2.1 release body）、README.md（签名表述更新）。local.properties/research 不进仓库。
 - 流程：push main（触发 verify + CodeQL）→ 打并推送 tag `v0.2.1`（触发 release job 出 arm64-v8a/armeabi-v7a/universal 三个**正式签名** APK 并建 Release）。
-- 若 CI 报 keystore 解码/密码失败：先在本机 `echo $B64 | base64 -d | keytool -list` 思路排查；Secret 是用户维护，不要把任何密码/密钥写进仓库或日志。
+- 若 CI 报 keystore 解码/密码失败：先在本机 `echo $B64 | base64 -d | keytool -list` 思路排查；Secret 由用户维护，不要把任何密码/密钥写进仓库或日志。
+- 结果：v0.2.1 已发布成功（正式版、非 prerelease；arm64 约 13.4MB / v7a 约 12.5MB / universal 约 24.1MB，均由 CI 用 Secrets 中的自有 keystore 签名）。
+- 仓库清理：删除早期 `design/ui-mockup.html` 与 `DEV_PLAN.md`（git 历史仍可追溯）；HANDOVER 去除个人邮箱、本机用户名路径、keystore 真实路径/别名/指纹、固定代理端口等隐私并统一泛化。

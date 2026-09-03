@@ -1,6 +1,6 @@
 pluginManagement {
     repositories {
-        // 统一使用官方源：CI 直连；本机走全局 ~/.gradle/gradle.properties 里的 7897 代理
+        // 统一使用官方源：CI 直连；本机走全局 ~/.gradle/gradle.properties 里配置的本地代理
         gradlePluginPortal()
         google()
         mavenCentral()

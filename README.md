@@ -135,7 +135,7 @@ sdk.dir=D\:\\apps\\AndroidSDK
 
 - Maven 依赖**统一使用官方源**（gradlePluginPortal / google / mavenCentral / JitPack），见 `settings.gradle.kts`；GitHub Actions 在海外直连即可，**不要加回阿里云镜像**（海外访问会 502 导致 CI 失败）。
 - Gradle wrapper distribution 走腾讯云镜像（`gradle/wrapper/gradle-wrapper.properties`），仅加速 wrapper 本身下载。
-- 国内本地构建让 Gradle 走本地代理：在**用户全局** `~/.gradle/gradle.properties`（不进仓库）写 `systemProp.https.proxyHost=127.0.0.1`、`systemProp.https.proxyPort=7897`（http 同理）。代理节点必须能访问 `dl.google.com`（AGP / AndroidX 只在该域名）。仓库内 `gradle.properties` 刻意不含代理，以免污染云端 CI。
+- 国内本地构建让 Gradle 走本地代理：在**用户全局** `~/.gradle/gradle.properties`（不进仓库）写 `systemProp.https.proxyHost=127.0.0.1`、`systemProp.https.proxyPort=<你本机代理端口>`（http 同理）。代理节点必须能访问 `dl.google.com`（AGP / AndroidX 只在该域名）。仓库内 `gradle.properties` 刻意不含代理，以免污染云端 CI。
 - 不想依赖代理节点时，可在**用户全局** `~/.gradle/init.d/` 放 init 脚本，把插件/依赖仓库重定向到阿里云镜像（google/central/public/gradle-plugin）+ JitPack；仓库内 `settings.gradle.kts` 始终保持官方源，CI 不受影响（HANDOVER §11 附可用脚本）。
 
 ### 3. 构建
