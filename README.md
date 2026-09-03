@@ -161,11 +161,11 @@ sdk.dir=D\:\\apps\\AndroidSDK
 | release | `app/build/outputs/apk/release/app-release.apk`（约 12MB） | 真机安装 |
 | debug | `app/build/outputs/apk/debug/app-debug.apk` | 模拟器（含 x86_64） |
 
-> 加 `-PsplitAbi` 一次产出 `app-arm64-v8a-release.apk`（约 12MB）、`app-armeabi-v7a-release.apk`（约 11MB）、`app-universal-release.apk`（约 22MB）；不加开关只打 arm64-v8a。当前用 debug 签名，正式上架前需替换为自有 keystore。**推送 `v*` tag 时 GitHub Actions 会自动构建三架构并发布 Release**（见 `.github/workflows/android.yml`）。
+> 加 `-PsplitAbi` 一次产出 `app-arm64-v8a-release.apk`（约 12MB）、`app-armeabi-v7a-release.apk`（约 11MB）、`app-universal-release.apk`（约 22MB）；不加开关只打 arm64-v8a。Release 优先使用自有正式签名（本机经 local.properties、CI 经 Actions Secrets 注入），未配置时回退 debug 签名。**推送 `v*` tag 时 GitHub Actions 会自动构建三架构并发布 Release**（见 `.github/workflows/android.yml`）。
 
 ## 自有签名（可选）
 
-Release 默认用 debug 签名以便快速侧载；要出正式签名包：
+Release 优先使用自有正式签名（仓库 CI 已配置好，本机侧载正式包也按下面配置一次即可）：
 
 ```powershell
 # 1) 生成 keystore（只需一次，妥善保管，丢了将无法对同一应用覆盖升级）
@@ -180,7 +180,9 @@ RELEASE_KEY_ALIAS=shuikebang
 RELEASE_KEY_PASSWORD=你的密钥密码
 ```
 
-之后 `:app:assembleRelease` 即自动使用自有签名；四个键缺失时回退 debug 签名并继续构建。CI 上把 keystore base64 存为 secret、在 workflow 解码成文件并设置同名环境变量即可，无需改构建脚本。
+之后 `:app:assembleRelease` 即自动使用自有签名；四个键缺失时回退 debug 签名并继续构建。`local.properties` 以 UTF-8 读取，密钥库路径含中文也可直接写（建议用正斜杠）。
+
+CI（GitHub Actions）使用 4 个 Repository Secrets：`KEYSTORE_B64`（keystore 的 base64，`base64 -w0 my-release.jks` 生成）、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`；workflow 在发版时解码为 `ci-release.jks` 并映射成同名 `RELEASE_*` 环境变量，keystore 不进仓库。
 
 ## 模型动态下发
 
@@ -279,7 +281,7 @@ RELEASE_KEY_PASSWORD=你的密钥密码
 ## 已知限制与后续
 
 - 小米超级岛 / vivo 原子岛的通知 extras 按公开文档实现，**尚待目标真机校准**（建议 HyperOS 小米 14/15、OriginOS 4/5 vivo 机型）；不支持时自动降级 L3 通知，功能不受影响。
-- Release 默认回退 debug 签名；已搭好**自有签名框架**：在 `local.properties` 配置 `RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD`（模板见 `local.properties.example`）即用自有 keystore，CI 可经同名环境变量注入。
+- Release 使用**自有正式签名**（v0.2.1 起）：本机在 `local.properties` 配置 `RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD`（模板见 `local.properties.example`，文件以 UTF-8 读取、支持中文路径）；CI 经 `KEYSTORE_B64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD` 四个 Secrets 注入；任一缺失才回退 debug 签名。
 - Release 提供 arm64-v8a / armeabi-v7a / universal 三架构包（CI 加 `-PsplitAbi` 产出）；debug 默认 arm64-v8a + x86_64 以便模拟器调试。
 - 后续可选项：watchOS 对应能力在 Android 为手表通知（暂未做）、平板横竖屏自适应。
 

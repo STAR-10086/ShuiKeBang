@@ -429,3 +429,23 @@ L2 悬浮窗需要“显示在其他应用上层”授权（本轮已做首次�
 - 本轮把 `gradle.properties` 里 Android Studio 自动加的 `org.gradle.tooling.parallel=true` 主动还原了（与修复无关、不进提交）；AS 可能再次自动写入，提交前留意 `git status`。
 - 新增/改动持久化字段后老用户升级：selectedModelId 缺省回退 RECOMMENDED_ID、vendorIsland 缺省 false，均向后兼容，无需 Room 迁移（DataStore 层）。
 - 仍只能真机验证：本地 Ollama 连通（模拟器 10.0.2.2 / 真机局域网 IP）、采集 onError 路径、通知 action 与厂商岛在小米/vivo 的折叠、标记落库后历史可见、通知点击定位。
+
+
+## 15. 第九轮：自有签名正式落地 + v0.2.1 + CWE-927 核查（本轮，进行到 push/tag）
+
+### 15.1 自有签名（用户提供 keystore，以后所有 release 都用它）
+- keystore：`D:\Develop\STAR的apk签名\my-release.jks`（PKCS12，普通连字符；别名 **key0**；store/key 密码相同，由用户掌握、不写进仓库）。证书 SHA-256 指纹 `A2:0C:58:4D:20:DB:5B:24:26:26:D5:AD:6C:52:0B:0D:12:7F:2E:98:82:BD:C9:AE:62:2C:9E:5E:10:ED:09:37`。同目录 `jks_base64.txt` 已验证与 jks 字节一致。
+- **本机**：`local.properties`（已 gitignore）写了 4 个 `RELEASE_*`，`RELEASE_STORE_FILE` 用正斜杠中文绝对路径。关键修复：`app/build.gradle.kts` 改为 `InputStreamReader(FileInputStream, UTF-8)` 读 local.properties——否则 Java Properties 默认 ISO-8859-1 会把中文密钥目录读乱导致找不到文件。
+- **CI**：用户已在仓库 Settings→Secrets→Actions 配好 `KEYSTORE_B64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD`。`.github/workflows/android.yml` 的 **release job** 新增 “Decode release keystore”（base64 -d 成 `ci-release.jks` 并用 keytool 自检），构建步骤用 env 把它们映射成 build.gradle 认的 `RELEASE_STORE_FILE=ci-release.jks / RELEASE_STORE_PASSWORD / RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD`。verify job 仍打 debug、不需要密钥。
+- 本地 `:app:assembleRelease -PsplitAbi` 三包用 apksigner 校验：签名者指纹与 key0 一致、三个 verify 退出码均 0。
+- 版本：versionCode 2→**3**、versionName 0.2.0-beta→**0.2.1**；tag 名不含 beta，workflow 的 prerelease 表达式判定为**正式版**。
+
+### 15.2 CWE-927 隐式 PendingIntent（用户给了 VendorIslandNotifier 190/236、FgsNotifier 103）
+- 结论：**当前 main 代码已合规，无需改 Kotlin**。全工程仅 3 个 PendingIntent 构造点——FgsNotifier.contentIntent/controlIntent、VendorIslandNotifier.tapIntent，全部是显式 `Intent(context, Xxx::class.java)` 且 flag 含 `FLAG_IMMUTABLE`（配 UPDATE_CURRENT 以便通知刷新，这是可交互通知的标准写法，不要机械换成 ONE_SHOT，否则刷新后按钮会失效）。
+- 用户引用的行号在远端 HEAD(8f9e2c1) 上已是 nm.notify/.build，并非 PendingIntent；那 3 条 CodeQL High 来自更早的 v0.1.0 旧版（`git log -S "Intent()"` 仅初始提交 c3ab418 出现过空构造）。**push 本轮代码触发 CodeQL 重扫 HEAD 后即应关闭**，需在 Security→Code scanning 确认 3 条变为 Closed。
+- OverlayCapsule/RecordService 里的 `Intent(context, RecordService::class.java)` 是直接 startForegroundService、不经过 PendingIntent，CodeQL 不报；同样已是显式。
+
+### 15.3 发版动作与回滚
+- 提交内容：app/build.gradle.kts（UTF-8 读取+版本号）、.github/workflows/android.yml（解码 keystore+签名 env+v0.2.1 release body）、README.md（签名表述更新）。local.properties/research 不进仓库。
+- 流程：push main（触发 verify + CodeQL）→ 打并推送 tag `v0.2.1`（触发 release job 出 arm64-v8a/armeabi-v7a/universal 三个**正式签名** APK 并建 Release）。
+- 若 CI 报 keystore 解码/密码失败：先在本机 `echo $B64 | base64 -d | keytool -list` 思路排查；Secret 是用户维护，不要把任何密码/密钥写进仓库或日志。

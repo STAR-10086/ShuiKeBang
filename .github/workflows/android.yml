@@ -70,7 +70,23 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Decode release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::KEYSTORE_B64 secret is missing" >&2; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$GITHUB_WORKSPACE/ci-release.jks"
+          # 用密码自检解码出的密钥库确实可读（keytool 随 setup-java 提供）
+          keytool -list -keystore "$GITHUB_WORKSPACE/ci-release.jks" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+
       - name: Build split release APKs (arm64-v8a / armeabi-v7a / universal)
+        env:
+          # build.gradle.kts 读取这四个 RELEASE_*（local.properties 或环境变量）完成正式签名
+          RELEASE_STORE_FILE: ci-release.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease -PsplitAbi --no-daemon --stacktrace
 
       - name: Rename APKs with version
@@ -94,19 +110,22 @@ jobs:
             app/build/outputs/apk/release/shuikebang-*-armeabi-v7a.apk
             app/build/outputs/apk/release/shuikebang-*-universal.apk
           body: |
-            课堂提问助手 Android **测试预览版（beta）**，功能可用、仍在迭代。
+            课堂提问助手 Android v0.2.1，首个使用**自有正式签名**的版本（此后版本沿用同一签名，可直接覆盖升级）。
 
-            ### 本版更新（v0.2.0-beta）
-            - 新增「AI 解答」：录制页点「解答」，用你自己填写的 OpenAI 兼容端点/Key 让大模型直接回答（App 不内置任何 API，仅在你主动点击时发送这一句问题文本）；原系统分享保留为「分享」。
-            - 设置改为二级菜单：灵敏度、录音增益、下载源点击弹窗选择；新增独立「AI 端点与 Key」页与详细「关于与隐私」页（含作者 GitHub 主页）。
-            - 权限更主动：开始录音时自动申请麦克风/通知权限，并首次引导悬浮窗权限。
-            - 可交互前台通知 + 可拖动操作的悬浮控制窗（暂停/继续/结束、查看最近提问）。
-            - 麦克风自动增益（AGC）与多档固定放大，改善老师声音偏小导致的漏识别。
-            - 跨句自问自答延迟确认，降低“老师自问自答被误报成提问”。
+            ### 本版更新（v0.2.1）
+            - 修复选中模型不生效：现在以你在模型页选择的模型为准，不会再“下了小模型又自动去下双语大模型”，首页显示真实模型名。
+            - 录音开始/暂停/继续/停止改为串行状态机、停止幂等，修复快速连点或多入口同时操作可能导致的崩溃与最后一句丢失。
+            - 麦克风启动失败会自动回滚、采集中途出错会明确提示并停止，不再出现“显示录制中却没在收音”的假录音。
+            - 历史课堂时长改为只计实际录音时间，暂停时间不再计入。
+            - 点提问通知可直接跳转到对应课堂并定位该问题（应用在前台也生效）。
+            - 模型下载支持真正断点续传；模型页新增“重新下载 / 删除模型”，模型损坏可自助恢复。
+            - 「标记重点」现在会真正保存，历史列表支持课堂重命名。
+            - 本地 Ollama / LM Studio 可用：局域网/本机允许 http 且 Key 可留空，外部端点仍强制 https + Key。
+            - 修复隐式 PendingIntent（CWE-927）安全告警，全部改为显式组件 + FLAG_IMMUTABLE。
 
             ### 下载说明（按手机架构选择）
             - **arm64-v8a**：2019 年后绝大多数手机，体积最小，优先选它。
             - **armeabi-v7a**：老旧 32 位 ARM 手机。
             - **universal**：全架构通用包，体积最大，不确定架构时选它。
 
-            > 安装后首次点“开始记录”会下载离线识别模型（仅这一步联网，建议 WiFi），模型不打进 APK；音频全程本地离线识别、不保存不上传。beta 包当前使用 debug 签名，正式版将切换为自有签名（见 local.properties.example）。
+            > 安装后首次点“开始记录”会下载离线识别模型（仅这一步联网，建议 WiFi），模型不打进 APK；音频全程本地离线识别、不保存不上传。

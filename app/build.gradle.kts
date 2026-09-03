@@ -1,4 +1,5 @@
 import java.io.FileInputStream
+import java.io.InputStreamReader
 import java.util.Properties
 
 plugins {
@@ -11,7 +12,8 @@ plugins {
 // —— 自有 release 签名：优先 local.properties，其次同名环境变量（CI 用）；都没有则回退 debug 签名 ——
 val releaseKeystore = Properties().apply {
     val f = rootProject.file("local.properties")
-    if (f.exists()) FileInputStream(f).use { load(it) }
+    // 以 UTF-8 读取，避免 Windows 中文路径（如密钥库目录）被 Properties 默认 ISO-8859-1 误读
+    if (f.exists()) InputStreamReader(FileInputStream(f), Charsets.UTF_8).use { load(it) }
 }
 fun releaseProp(key: String): String? =
     releaseKeystore.getProperty(key) ?: System.getenv(key)
@@ -41,8 +43,8 @@ android {
         applicationId = "com.star.shuikebang"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0-beta"
+        versionCode = 3
+        versionName = "0.2.1"
         vectorDrawables { useSupportLibrary = true }
         ndk {
             if (splitAbi) {
