@@ -75,11 +75,11 @@ class VendorIslandNotifier(private val context: Context) {
     // ---------------- 发送/更新/结束 ----------------
 
     private fun tapIntent(questionId: Long): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            setPackage(context.packageName) // CWE-927：显式锁定本应用，PendingIntent 不发给第三方
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(MainActivity.EXTRA_QUESTION_ID, questionId)
-        }
+        // CWE-927：显式 class + setPackage 锁定本应用；不用 apply{}，避免静态分析漏判显式性
+        val intent = Intent(context, MainActivity::class.java)
+        intent.setPackage(context.packageName)
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        intent.putExtra(MainActivity.EXTRA_QUESTION_ID, questionId)
         return PendingIntent.getActivity(
             context, questionId.toInt(), intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
