@@ -441,10 +441,10 @@ L2 悬浮窗需要“显示在其他应用上层”授权（本轮已做首次�
 - 版本：versionCode 2→**3**、versionName 0.2.0-beta→**0.2.1**；tag 名不含 beta，workflow 的 prerelease 表达式判定为**正式版**。
 
 ### 15.2 CWE-927 隐式 PendingIntent（用户给了 VendorIslandNotifier 190/236、FgsNotifier 103）
-- **根因（下载 SARIF 看 codeFlow 才定位）**：CodeQL 的 java/android/implicit-pendingintents 对 Kotlin 两参构造 `Intent(context, Xxx::class.java)` **没有识别为显式 component**（数据流从 `new Intent` 起就被标 `<implicit>`），sink 报在 nm.notify / setContentIntent 行，所以告警行号看起来不是 PendingIntent 创建处。
-- **修复**：给 3 个 PendingIntent 用的 Intent 在显式 class 之外再显式 `setPackage(context.packageName)`（FgsNotifier.contentIntent/controlIntent、VendorIslandNotifier.tapIntent），这是 CodeQL 明确建模的“锁定本应用、不发给第三方”消除条件。flag 保持 `FLAG_IMMUTABLE or FLAG_UPDATE_CURRENT`（可刷新通知需要 UPDATE_CURRENT，不要换 ONE_SHOT，否则刷新后按钮失效）。
+- **根因（两次下 SARIF 看 codeFlow 才定位，教训深刻）**：CodeQL 的 java/android/implicit-pendingintents 对 Kotlin 两参构造 `Intent(context, Xxx::class.java)` 本就识别不稳；**真正的坑是 `.apply { }` 作用域函数会阻断它的局部数据流**——第一次修复把 `setPackage(context.packageName)` 写进 apply{} 块，重扫后 SARIF 的 codeFlow 里压根没有 setPackage 节点（只见 `new Intent -> apply -> getActivity`，仍标 `<implicit>`），3 条照报。
+- **最终修复（已验证最新分析 results=0）**：3 个 PendingIntent（FgsNotifier.contentIntent/controlIntent、VendorIslandNotifier.tapIntent）改为**不用 apply**——先 `val intent = Intent(context, Xxx::class.java)`，再用独立语句 `intent.setPackage(context.packageName)`、`intent.addFlags(...)`、`intent.action=...`，最后传入 `PendingIntent.getActivity/getForegroundService`。显式 class + 独立 setPackage 双保险，静态分析才能沿局部变量数据流追踪到“已锁定本应用”。flag 保持 `FLAG_IMMUTABLE or FLAG_UPDATE_CURRENT`（可刷新通知需要 UPDATE_CURRENT，不要换 ONE_SHOT，否则刷新后按钮失效）。
 - OverlayCapsule/RecordService 里的 Intent 直接 startForegroundService、不经过 PendingIntent，CodeQL 不报，无需改。
-- 教训：判断这类告警要下 SARIF 看 codeFlow，不能只凭“代码里写了显式 class”；改完 push 触发重扫，在 Security→Code scanning 确认 3 条变 Closed。
+- **验证方法**：`gh api -H "Accept: application/sarif+json" repos/<owner>/<repo>/code-scanning/analyses/<id>` 下最新分析 SARIF，`runs[0].results` 为 0 才算真修复；只看网页 alerts 可能因人工 dismissed 而误判。教训：这类告警必须下 SARIF 看 codeFlow，且 Kotlin 里给 PendingIntent 用的 Intent 不要套 apply{}。
 
 ### 15.3 发版动作与回滚
 - 提交内容：app/build.gradle.kts（UTF-8 读取+版本号）、.github/workflows/android.yml（解码 keystore+签名 env+v0.2.1 release body）、README.md（签名表述更新）。local.properties/research 不进仓库。
