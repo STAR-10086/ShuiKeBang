@@ -41,6 +41,8 @@ class FgsNotifier(private val context: Context) {
 
     private fun contentIntent(): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
+            // 显式锁定本应用包名（CWE-927）：与显式 class 双保险，确保 PendingIntent 不会发给第三方
+            setPackage(context.packageName)
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         return PendingIntent.getActivity(
@@ -50,7 +52,10 @@ class FgsNotifier(private val context: Context) {
     }
 
     private fun controlIntent(action: String, requestCode: Int): PendingIntent {
-        val intent = Intent(context, RecordService::class.java).apply { this.action = action }
+        val intent = Intent(context, RecordService::class.java).apply {
+            setPackage(context.packageName) // CWE-927：显式锁定本应用
+            this.action = action
+        }
         return PendingIntent.getForegroundService(
             context, requestCode, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

@@ -76,6 +76,7 @@ class VendorIslandNotifier(private val context: Context) {
 
     private fun tapIntent(questionId: Long): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
+            setPackage(context.packageName) // CWE-927：显式锁定本应用，PendingIntent 不发给第三方
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(MainActivity.EXTRA_QUESTION_ID, questionId)
         }
