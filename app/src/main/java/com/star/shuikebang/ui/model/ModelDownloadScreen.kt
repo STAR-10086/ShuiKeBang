@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.star.shuikebang.asr.AsrModelSpec
 import com.star.shuikebang.asr.ModelState
 import com.star.shuikebang.ui.theme.Brand
+import com.star.shuikebang.ui.theme.BrandSoft
 import com.star.shuikebang.ui.theme.CardWhite
 import com.star.shuikebang.ui.theme.OkGreen
 import com.star.shuikebang.ui.theme.PageBg
@@ -55,6 +56,8 @@ import java.util.Locale
 @Composable
 fun ModelDownloadScreen(
     onBack: () -> Unit,
+    fromStartRequest: Boolean = false,
+    onStartRecording: (String) -> Unit,
     vm: ModelDownloadViewModel = viewModel(),
 ) {
     val spec by vm.selectedSpec.collectAsStateWithLifecycle()
@@ -90,6 +93,20 @@ fun ModelDownloadScreen(
                 fontSize = TextUnit(12.5f, TextUnitType.Sp),
             )
 
+            // 从“开始记录”跳进来时说明为什么没直接开始，避免用户以为卡住
+            if (fromStartRequest && state !is ModelState.Ready) {
+                Text(
+                    "选中的模型还没就绪，所以先到了这里：下载完成后下方会出现「开始记录」，点它即可进入录音。",
+                    color = TextMain,
+                    fontSize = TextUnit(12.5f, TextUnitType.Sp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(BrandSoft)
+                        .padding(12.dp),
+                )
+            }
+
             vm.allModels.forEach { m ->
                 ModelOption(
                     spec = m,
@@ -108,6 +125,7 @@ fun ModelDownloadScreen(
                 onDownload = vm::download,
                 onRedownload = vm::redownload,
                 onRequestDelete = { showDeleteDialog = true },
+                onStartRecording = { onStartRecording(spec.id) },
             )
         }
     }
@@ -171,6 +189,7 @@ private fun DownloadCard(
     onDownload: () -> Unit,
     onRedownload: () -> Unit,
     onRequestDelete: () -> Unit,
+    onStartRecording: () -> Unit,
 ) {
     Column(
         Modifier
@@ -206,6 +225,13 @@ private fun DownloadCard(
             ModelState.Extracting -> Text("正在解压模型…", color = Brand, fontSize = TextUnit(13f, TextUnitType.Sp))
             ModelState.Ready -> {
                 Text("模型已就绪，开始记录时会使用该模型", color = OkGreen, fontSize = TextUnit(13f, TextUnitType.Sp))
+                Spacer(Modifier.height(10.dp))
+                // 主操作：下载完就能直接进录音，不用返回到首页再点一次
+                Button(
+                    onClick = onStartRecording,
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Brand),
+                ) { Text("开始记录") }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = onRedownload, modifier = Modifier.weight(1f)) { Text("重新下载") }

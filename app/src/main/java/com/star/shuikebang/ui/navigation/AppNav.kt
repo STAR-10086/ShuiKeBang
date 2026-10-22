@@ -3,7 +3,10 @@ package com.star.shuikebang.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,15 +26,33 @@ import com.star.shuikebang.ui.record.RecordScreen
 import com.star.shuikebang.ui.settings.AboutScreen
 import com.star.shuikebang.ui.settings.AiSettingsScreen
 import com.star.shuikebang.ui.settings.SettingsScreen
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppNav(openQuestionId: Long? = null) {
     val nav = rememberNavController()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val settings = SettingsRepository.get(context)
 
-    // 用户持久化选择的模型 id：开始录音时明确传给 Service，避免“下了小模型却又去下默认双语模型”
-    val selectedModelId by produceState(initialValue = BuiltinModels.RECOMMENDED_ID) {
-        value = SettingsRepository.get(context).snapshot().selectedModelId
+    // 是否由首页“开始记录”跳来模型页：仅用于在模型页给出“先下载再开始”的提示文案
+    var fromStartRequest by remember { mutableStateOf(false) }
+
+    /**
+     * 开始录音的唯一入口：选中的模型就绪就直接起服务并进录音页，否则去模型页下载。
+     * 模型 id 由调用方给出——首页在**点击那一刻**现读 DataStore，
+     * 不再用 AppNav 组合期读一次的缓存值（模型页改过选择后缓存会过期，
+     * 会导致“下载好了却还是被送回模型页、且模型页没有继续按钮”的死循环）。
+     */
+    fun startRecording(modelId: String) {
+        val spec = BuiltinModels.byId(modelId)
+        if (ModelManager.get(context).isReady(spec)) {
+            RecordService.start(context, spec.id)
+            nav.navigate(Routes.RECORD)
+        } else {
+            fromStartRequest = true
+            nav.navigate(Routes.MODEL)
+        }
     }
 
     // 点击提问通知（含应用已在前台的二次点击）：按问题反查所属课堂并跳转、定位该问题
@@ -46,23 +67,27 @@ fun AppNav(openQuestionId: Long? = null) {
         composable(Routes.HOME) {
             IdleScreen(
                 onStartRecording = {
-                    val spec = BuiltinModels.byId(selectedModelId)
-                    // 只认用户选中的模型：它就绪才直接开始（并把 id 显式传入），否则去模型页下载
-                    if (ModelManager.get(context).isReady(spec)) {
-                        RecordService.start(context, spec.id)
-                        nav.navigate(Routes.RECORD)
-                    } else {
-                        nav.navigate(Routes.MODEL)
+                    scope.launch {
+                        val id = runCatching { settings.snapshot().selectedModelId }
+                            .getOrDefault(BuiltinModels.RECOMMENDED_ID)
+                        startRecording(id)
                     }
                 },
                 onOpenHistory = { nav.navigate(Routes.HISTORY) },
-                onOpenModel = { nav.navigate(Routes.MODEL) },
+                onOpenModel = {
+                    fromStartRequest = false
+                    nav.navigate(Routes.MODEL)
+                },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
             )
         }
 
         composable(Routes.MODEL) {
-            ModelDownloadScreen(onBack = { nav.popBackStack() })
+            ModelDownloadScreen(
+                onBack = { nav.popBackStack() },
+                fromStartRequest = fromStartRequest,
+                onStartRecording = { id -> startRecording(id) },
+            )
         }
 
         composable(Routes.RECORD) {

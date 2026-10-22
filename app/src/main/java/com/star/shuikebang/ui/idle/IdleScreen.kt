@@ -38,7 +38,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -53,8 +52,10 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.star.shuikebang.asr.BuiltinModels
 import com.star.shuikebang.asr.ModelManager
+import com.star.shuikebang.asr.ModelState
 import com.star.shuikebang.data.prefs.AppSettings
 import com.star.shuikebang.data.prefs.SettingsRepository
 import com.star.shuikebang.perm.PermissionHelper
@@ -75,16 +76,15 @@ fun IdleScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // 以用户持久化选择的模型为准：就绪状态与首页展示名都反映“选中的那一个”，而不是任意已下载模型
-    val selectedSpec by produceState(initialValue = BuiltinModels.SMALL_BILINGUAL) {
-        value = BuiltinModels.byId(SettingsRepository.get(context).snapshot().selectedModelId)
-    }
-    val modelReady by produceState(initialValue = false, selectedSpec) {
-        value = ModelManager.get(context).isReady(selectedSpec)
-    }
-    val prefs by produceState<AppSettings?>(initialValue = null) {
-        value = SettingsRepository.get(context).snapshot()
-    }
+    // 设置与模型状态都按 Flow 实时收取：在模型页改了选择、或下载/删除完成后，首页卡片立刻反映真实状态
+    // （原来用 produceState 只在首次组合读一次，改过选择或下载完成后首页仍显示旧值）
+    val prefs: AppSettings? by SettingsRepository.get(context).flow
+        .collectAsStateWithLifecycle(initialValue = null)
+    val selectedSpec = BuiltinModels.byId(prefs?.selectedModelId ?: BuiltinModels.RECOMMENDED_ID)
+    val modelState by ModelManager.get(context)
+        .stateFlow(selectedSpec.id)
+        .collectAsStateWithLifecycle()
+    val modelReady = modelState is ModelState.Ready
     var showOverlayGuide by remember { mutableStateOf(false) }
 
     // 麦克风已具备后的统一入口：按需引导悬浮窗，再真正开始
